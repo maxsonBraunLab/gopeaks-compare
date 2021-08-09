@@ -7,21 +7,24 @@ import pandas as pd
 from snakemake.utils import validate, min_version
 import plotly as plt
 import plotly.graph_objects as go
+from snakemake.utils import Paramspace
 
 ##### set minimum snakemake version #####
-min_version("5.1.2")
+min_version("5.32")
 
 include: "src/common.py"
 configfile: "src/config.yml"
+include: "rules/peaks.py"
+include: "rules/model_evaluation.py"
 
 st = pd.read_table('samplesheet.tsv').set_index('sample',drop=False)
 validate(st, schema="schemas/samples.schema.yml")
+# paramspace=Paramspace(pd.read_csv("src/precision_recall_params.tsv", sep = "\t"), filename_params=['pval'])
 
 samps = get_samples()
 reads= get_reads()
 marks=get_marks()
 
-marks = get_marks()
 sample_noigg = [k for k in samps if config["IGG"] not in k]
 marks_noigg = [m for m in marks if config["IGG"] not in m]
 
@@ -39,45 +42,70 @@ fastqScreenDict = {
  'aligner_paths': {'bowtie2': 'bowtie2'}
 }
 
-localrules: frip_plot, fraglength_plot
+all_methods = ["gopeaks", "macs2", "seacr-relaxed", "seacr-stringent"]
 
 rule all:
     input:
+        # quality control -------------------------------------------
         expand("data/fastqc/{read}.html", read=reads),
-        expand("data/fastq_screen/{read}.fastq_screen.txt", read=reads),
-        expand("data/counts/{mark}_counts.tsv", mark=marks_noigg),
-        expand(["data/markd/{sample}.sorted.markd.bam",
-                "data/markd/{sample}.sorted.markd.bam",
-                "data/markd/{sample}.sorted.markd.fraglen.tsv",
-                "data/trakcs/{sample}.bw",
+        expand("data/fastq_screen/{read}_screen.txt", read=reads),
+        expand(["data/ban/{sample}.ban.sorted.markd.bam",
+                "data/tracks/{sample}.bw",
                 ], sample=samps),
-        expand(["data/callpeaks/{sample}_peaks.tsv", 
-        "data/preseq/lcextrap_{sample}.txt",
-        "data/dtools/fingerprint_{sample}.tsv",
-        "data/plotEnrichment/frip_{sample}.tsv",
+        expand(["data/preseq/lcextrap_{sample}.txt",
+        # "data/dtools/fingerprint_{sample}.tsv",
         ], sample=samps),
-        "data/multiqc/multiqc_report.html",
+        expand("data/plotEnrichment/{method}_{sample}.{ext}",
+            method = all_methods,
+            sample = samps,
+            ext = ["png", "tsv"]),
+        # peak calling ----------------------------------------------
         "src/gopeaks",
-        expand(["data/deseq2/{mark}/{mark}-rld-pca.svg",
-        "data/deseq2/{mark}/{mark}-vsd-pca.svg",
-        "data/deseq2/{mark}/{mark}-normcounts.csv",
-        "data/deseq2/{mark}/{mark}-lognormcounts.csv",
-        "data/deseq2/{mark}/{mark}-rld.svg",
-        "data/deseq2/{mark}/{mark}-vsd.svg",
-        "data/deseq2/{mark}/{mark}-vsd-dist.svg",
-        "data/deseq2/{mark}/{mark}-rld-dist.svg",
-        "data/deseq2/{mark}/{mark}-dds.rds"], mark=marks_noigg),
-        # quality control plots
-        "data/markd/fraglen.html",
-        "data/plotEnrichment/frip.html"
+        "src/SEACR-1.3/SEACR_1.3.sh",
+        expand("data/gopeaks/{sample}.bed", sample = samps),
+        expand("data/macs2/{sample}_peaks.xls", sample = samps),
+        expand("data/seacr/{sample}.{type}.bed",
+            sample = samps,
+            type = ["relaxed", "stringent"]),
+        # custom analyses -------------------------------------------
+        "data/consensus", "data/consensus/all_groups.txt",
+        "data/consensus_signal",
+        "data/exclusive_signal",
+        "data/computeMatrix",
+        "data/plotHeatmap",
+        "data/intervene",
+        "data/fragments",
+        "data/GO",
+        # custom figures --------------------------------------------
+        "data/figures/peak-counts.png",
+        "data/figures/FRiP.png",
+        "data/figures/consensus_signal",
+        "data/figures/exclusive_signal",
+        "data/figures/promoter_fragment.png",
+        "data/figures/peak_distances",
+        "data/figures/GO/exclusive",
+        "data/figures/GO/consensus",
+        "data/figures/roc",
+        "data/figures/pr",
+        # model evaluation ------------------------------------------
+        expand("data/model_evaluation/{method}_{sample}.txt",
+            method = all_methods,
+            sample = list(config["STANDARDS"].keys()) )
 
-# fastqc for each read 
+# try out different normalization schemes for ROC curves
+# expand("data/evaluate_rpkm/{method}_{sample}.txt",
+#     method = all_methods],
+#     sample = list(config["STANDARDS"].keys()) ),
+
+# fastqc for each read
 rule fastqc:
     input:
         "data/raw/{read}.fastq.gz"
     output:
         html="data/fastqc/{read}.html",
         zip="data/fastqc/{read}_fastqc.zip"
+    params:
+        ""
     log:
         "data/logs/fastqc_{read}.log"
     threads: 4
@@ -85,21 +113,35 @@ rule fastqc:
         "0.65.0/bio/fastqc"
 
 # detect contaminants
+# rule fastq_screen:
+#     input:
+#         "data/raw/{read}.fastq.gz"
+#     output:
+#         txt="data/fastq_screen/{read}.fastq_screen.txt",
+#         png="data/fastq_screen/{read}.fastq_screen.png"
+#     params:
+#         fastq_screen_config=fastqScreenDict,
+#         subset=100000,
+#         aligner='bowtie2'
+#     log:
+#         "data/logs/fastq_screen_{read}.log"
+#     threads: 8
+#     wrapper:
+#         "0.74.0/bio/fastq_screen"
+
 rule fastq_screen:
     input:
         "data/raw/{read}.fastq.gz"
     output:
-        txt="data/fastq_screen/{read}.fastq_screen.txt",
-        png="data/fastq_screen/{read}.fastq_screen.png"
-    params:
-        fastq_screen_config=fastqScreenDict,
-        subset=100000,
-        aligner='bowtie2'
+        "data/fastq_screen/{read}_screen.txt"
+    conda:
+        "envs/fastq_screen.yml"
     log:
-        "data/logs/fastq_screen_{read}.log"
+        "data/logs/fastq_screen_{read}.txt"
     threads: 8
-    wrapper:
-        "0.65.0/bio/fastq_screen"
+    shell:
+        "fastq_screen --aligner bowtie2 --threads {threads} --outdir data/fastq_screen "
+        "--conf {config[FASTQ_SCREEN_CONFIG]} --force {input} > {log} 2>&1"
 
 # align samples to genome
 rule bowtie2:
@@ -145,12 +187,22 @@ rule markdup:
     shell:
         "sambamba markdup --tmpdir=data/markd -t {threads} {input} {output} > {log} 2>&1"
 
-
-rule index:
+# remove reads in blacklist regions
+rule banlist:
     input:
         rules.markdup.output
     output:
-        "data/markd/{sample}.sorted.markd.bam.bai"
+        "data/ban/{sample}.ban.sorted.markd.bam"
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bedtools intersect -v -a {input} -b {config[BANLIST]} > {output}"
+
+rule index:
+    input:
+        rules.banlist.output
+    output:
+        "data/ban/{sample}.ban.sorted.markd.bam.bai"
     conda:
         "envs/sambamba.yml"
     threads: 4
@@ -161,21 +213,21 @@ rule index:
 
 rule tracks:
     input:
-        rules.markdup.output
+        rules.banlist.output
     output:
-        "data/trakcs/{sample}.bw"
+        "data/tracks/{sample}.bw"
     conda:
         "envs/dtools.yml"
     threads:
         8
     shell:
-        "bamCoverage -p {threads} --binSize 10 --smoothLength 50 --normalizeUsing CPM -b {input} -o {output}"
+        "bamCoverage -b {input} -o {output} -p {threads} --binSize 10 --smoothLength 50 --normalizeUsing CPM"
 
 rule fraglength:
     input:
-        rules.markdup.output
+        rules.banlist.output
     output:
-        "data/markd/{sample}.sorted.markd.fraglen.tsv"
+        "data/ban/{sample}.sorted.markd.fraglen.tsv"
     conda:
         "envs/align.yml"
     shell:
@@ -183,9 +235,9 @@ rule fraglength:
 
 rule fraglength_plot:
     input:
-        expand("data/markd/{sample}.sorted.markd.fraglen.tsv", sample = samps)
+        expand("data/ban/{sample}.sorted.markd.fraglen.tsv", sample = samps)
     output:
-        "data/markd/fraglen.html"
+        "data/ban/fraglen.html"
     run:
         pd.options.plotting.backend = "plotly"
         dfs = []
@@ -204,7 +256,7 @@ rule fraglength_plot:
 
 rule preseq:
     input:
-       rules.markdup.output
+       rules.banlist.output
     output:
         "data/preseq/estimates_{sample}.txt"
     conda:
@@ -216,7 +268,7 @@ rule preseq:
 
 rule preseq_lcextrap:
     input:
-        rules.markdup.output
+        rules.banlist.output
     output:
         "data/preseq/lcextrap_{sample}.txt"
     conda:
@@ -225,11 +277,11 @@ rule preseq_lcextrap:
         "data/logs/preseq_{sample}.log"
     shell:
         "preseq lc_extrap -B -P -e 1000000000 -o {output} {input} > {log} 2>&1"
-    
+
 
 rule plotFinger:
     input:
-        "data/markd/{sample}.sorted.markd.bam", "data/markd/{sample}.sorted.markd.bam.bai"
+        "data/ban/{sample}.ban.sorted.markd.bam", "data/ban/{sample}.ban.sorted.markd.bam.bai"
     output:
         "data/dtools/fingerprint_{sample}.tsv"
     conda:
@@ -239,104 +291,63 @@ rule plotFinger:
     shell:
         "plotFingerprint -b {input[0]} --smartLabels --outRawCounts {output} > {log} 2>&1"
 
-rule wget_callpeaks:
+rule wget_gopeaks:
     output:
-        "src/gopeaks"
+       "src/gopeaks"
     shell:
-        "src/wget_gopeaks.sh {config[GOPEAKS_RELEASE_VERSION]}"
+       "src/wget_gopeaks.sh {config[GOPEAKS_RELEASE_VERSION]}"
 
-rule callpeaks:
+rule gopeaks:
     input:
-        get_callpeaks
+        gopeaks = rules.wget_gopeaks.output,
+        sample = "data/ban/{sample}.ban.sorted.markd.bam",
+        index = "data/ban/{sample}.ban.sorted.markd.bam.bai",
+        igg = get_igg
     output:
-        "data/callpeaks/{sample}_peaks.tsv"
-    log:
-        "data/logs/callpeaks_{sample}.log"
+        "data/gopeaks/{sample}.bed"
     params:
-        igg=get_igg
+        igg = gopeaks_igg
+    log:
+        "data/logs/gopeaks_{sample}.log"
     shell:
-        """
-        ./src/gopeaks -bam {input[0]} -control {params.igg} -of data/callpeaks/{wildcards.sample} > {log} 2>&1
-        """
+        "{input.gopeaks} -bam {input.sample} {params.igg} -mdist 1000 -of {output} > {log} 2>&1"
+# input.igg requires the IgG bam file, even if treatment is IgG.
+# however, params.igg will mask input.igg if treatment is IgG.
+# so treatment file != control file for all samples.
 
-# get consensus
+# get consensuspeaks
+# rule consensus:
+#     input:
+#        macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
+#        gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
+#        seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
+#        seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
+#     output:
+#         directory("data/consensus"),
+#         all_groups = "data/consensus/all_groups.txt"
+#     conda:
+#        "envs/consensus.yml"
+#     log:
+#        "data/logs/consensus.log"
+#     script:
+#         "src/custom/consensus_peaks.R"
+
 rule consensus:
     input:
-       expand("data/callpeaks/{sample}_peaks.tsv", sample=sample_noigg)
+       macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
+       gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
+       seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
+       seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
     output:
-       "data/counts/{mark}_counts.tsv"
+        directory("data/consensus"),
+        "data/consensus/all_groups.txt"
     conda:
-       "envs/bedtools.yml"
-    log:
-       "data/logs/{mark}_counts.log"
+        "envs/bedtools.yml"
     shell:
-       "src/consensus_peaks.sh {wildcards.mark} data/callpeaks data/markd {output} > {log} 2>&1"
-
-rule frip:
-    input:
-        rules.callpeaks.output, "data/markd/{sample}.sorted.markd.bam"
-    output:
-        "data/plotEnrichment/frip_{sample}.png", "data/plotEnrichment/frip_{sample}.tsv"
-    conda:
-        "envs/dtools.yml"
-    log: 
-        "data/logs/plotEnrichment_{sample}.log"
-    shell:
-        "plotEnrichment -b {input[1]} --BED {input[0]} --regionLabels 'frip' --outRawCounts {output[1]} -o {output[0]} > {log} 2>&1"
-
-rule frip_plot:
-    input:
-        expand("data/plotEnrichment/frip_{sample}.tsv", sample = samps)
-    output:
-        "data/plotEnrichment/frip.html"
-    run:
-        pd.options.plotting.backend = "plotly"
-        dfs = []
-        for i in sorted(input):
-            cond_marker = "_".join(i.split("_")[1:3])
-            temp_df = pd.read_csv(i, sep = "\t", usecols=["percent"]).rename(columns = {'percent': cond_marker})
-            dfs.append(temp_df)
-        frip_df = pd.concat(dfs, axis = 1)
-        frip_df = frip_df.rename(index={0: 'inside'})
-        frip_df.loc["outside"] = 100 - frip_df.loc['inside']
-        fig = go.Figure(data=[
-            go.Bar(name="inside_peaks", x=frip_df.columns, y=frip_df.loc['inside'], marker_color='rgb(255, 201, 57)'),
-            go.Bar(name='outside_peaks', x=frip_df.columns, y=frip_df.loc['outside'], marker_color='rgb(0,39, 118)')
-        ])
-        fig.update_layout(barmode='stack', 
-            title='Fraction of Reads in Peaks by Sample', 
-            xaxis_tickfont_size=14, yaxis=dict(title='Fraction of reads in peaks', 
-            titlefont_size=16, tickfont_size=14), xaxis=dict(title='Samples'))
-        fig.write_html(str(output))
-
-rule deseq2:
-    input:
-        counts="data/counts/{mark}_counts.tsv",
-        meta="src/deseq2_metadata.csv",
-        genes=config["GENES"]
-    output:
-        pcaPlot="data/deseq2/{mark}/{mark}-rld-pca.svg",
-        pcaPlotVsd="data/deseq2/{mark}/{mark}-vsd-pca.svg",
-        normCounts="data/deseq2/{mark}/{mark}-normcounts.csv",
-        lnormCounts="data/deseq2/{mark}/{mark}-lognormcounts.csv",
-        sdMeanRld="data/deseq2/{mark}/{mark}-rld.svg",
-        sdMeanVsd="data/deseq2/{mark}/{mark}-vsd.svg",
-        sampleDistVsd="data/deseq2/{mark}/{mark}-vsd-dist.svg",
-        sampleDistRld="data/deseq2/{mark}/{mark}-rld-dist.svg",
-        rds="data/deseq2/{mark}/{mark}-dds.rds"
-    params:
-        mark=lambda wildcards: wildcards.mark,
-        outdir = "data/deseq2/",
-        numclusters = 4
-    conda:
-        "envs/deseq2.yml"
-    script:
-        "src/deseq2.R"
+        "bash src/custom/consensus_peaks.sh"
 
 rule multiqc:
     input:
-        expand("data/plotEnrichment/frip_{sample}.tsv", sample=samps),
-        expand("data/deseq2/{mark}/{mark}-dds.rds",mark=marks_noigg),
         directory("data/")
     output:
         "data/multiqc/multiqc_report.html"
@@ -345,5 +356,160 @@ rule multiqc:
     log:
         "data/logs/multiqc.log"
     shell:
-        "multiqc -f -c src/multiqc_conf.yml -o data/multiqc {input} > {log} 2>&1"
+        "multiqc -f -c src/multiqc_conf.yml -o data/multiqc data/ > {log} 2>&1"
 
+# custom analyses ---------------------------------------------------------------------------------
+
+# count reads at consensus regions
+rule consensus_signal:
+    input:
+        "data/consensus"
+    output:
+        directory("data/consensus_signal")
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bash src/custom/consensus_signal.sh"
+
+rule consensus_signal_plot:
+    input:
+        "data/consensus_signal"
+    output:
+        directory("data/figures/consensus_signal")
+    conda:
+        "envs/plot.yml"
+    script:
+        "src/custom/consensus_signal.R"
+
+# count basic peak statistics like peak counts, FRiP at the sample level.
+# 'data/consensus' input ensures peak-calling is finished.
+rule peak_characteristics:
+    input:
+        "data/consensus"
+    output:
+        directory("data/figures/peak_distances"),
+        directory("data/figures/peak-counts"),
+        directory("data/figures/FRiP")
+    conda:
+        "envs/plot.yml"
+    script:
+        "src/custom/peak_characteristics.R"
+
+# deeptools heatmap for all samples at consensus intervals.
+rule heatmap:
+    input:
+        "data/consensus/all_groups.txt",
+        "data/intervene"
+    output:
+        directory("data/computeMatrix"),
+        directory("data/plotHeatmap")
+    conda:
+        "envs/heatmap.yml"
+    threads: 16
+    shell:
+        "bash src/custom/heatmap.sh -i {input[0]}"
+
+# venn diagram of consensus peaks
+rule intervene:
+    input:
+        "data/consensus/all_groups.txt"
+    output:
+        directory("data/intervene")
+    conda:
+        "envs/heatmap.yml"
+    shell:
+        "bash src/custom/intervene.sh -i {input}"
+
+# count reads at the replicate level at caller-exclusive peaks.
+rule exclusive_signal:
+    input:
+        "data/intervene"
+    output:
+        directory("data/exclusive_signal")
+    conda:
+        "envs/bedtools.yml"
+    threads: 8
+    shell:
+        "bash src/custom/exclusive_signal.sh"
+
+rule exclusive_signal_plot:
+    input:
+        "data/exclusive_signal"
+    output:
+        directory("data/figures/exclusive_signal")
+    conda:
+        "envs/plot.yml"
+    script:
+        "src/custom/exclusive_signal.R"
+
+# count consensus peak intersections with promoters by method.
+# promoter buckets usually 1kb downstream and 1-5kb upstream of a gene.
+rule promoter_fragment:
+    input:
+        "data/consensus",
+        config["GTF"]
+    output:
+        directory("data/fragments")
+    conda:
+        "envs/bedtools.yml"
+    params:
+        downstream = 1000,
+        prefix = "hg38"
+    shell:
+        "bash src/custom/peak_fragmentation.sh -g {input[1]} -d {params.downstream} -o {params.prefix}"
+
+rule promoter_fragment_plot:
+    input:
+        "data/fragments"
+    output:
+        "data/figures/promoter_fragment.png"
+    conda:
+        "envs/plot.yml"
+    script:
+        "src/custom/peak_fragmentation.R"
+
+rule gene_ontology:
+    input:
+        "data/consensus",
+        "data/intervene"
+    output:
+        directory("data/GO"),
+        directory("data/figures/GO/exclusive"),
+        directory("data/figures/GO/consensus")
+    conda:
+        "envs/gene_ontology.yml"
+    script:
+        "src/custom/go.R"
+
+rule encode:
+    input:
+        "data/consensus"
+    output:
+        directory("data/encode")
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bash src/custom/encode.sh"
+
+
+# count reads at the replicate level at all called peaks. These have lots of biological replicate variation!
+# rule sample_signal:
+#     input:
+#         "data/consensus"
+#     output:
+#         directory("data/sample_signal")
+#     conda:
+#         "envs/bedtools.yml"
+#     threads: 8
+#     shell:
+#         "bash src/custom/sample_signal.sh"
+
+# rule sample_signal_plot:
+#     input:
+#         "data/sample_signal"
+#     output:
+#         directory("data/figures/sample_signal")
+#     conda:
+#         "envs/plot.yml"
+#     script:
+#         "src/custom/sample_signal.R"

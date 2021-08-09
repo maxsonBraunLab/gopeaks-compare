@@ -3,7 +3,8 @@ USEIGG: true
 #  how is IgG spelled in the filename, eg: "IgG"  for file "G1_IgG_Kasumi_S25_R2.fastq.gz"
 IGG: "IgG"
 CSIZES:
-    - "/home/groups/hoolock2/u0/genomes/ucsc/hg38/hg38.known.chrom.sizes"
+    - "/home/groups/MaxsonLab/indices/GRch38/hg38.chrom.sizes"
+GSIZE: "2.7e9"
 GENOME:
     - "/home/groups/MaxsonLab/indices/GRch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.bowtie_index"
 GENES: 
@@ -17,4 +18,39 @@ BOWTIE2:
         - "/home/groups/MaxsonLab/indices/ecoli_EB1/genome"
     MYCO:
         - "/home/groups/MaxsonLab/indices/mycoplasma_index/mycoplasma"
-GOPEAKS_RELEASE_VERSION: "v0.1.5"
+
+# custom analysis -------------------------------------------------------------
+
+# what version of gopeaks to use?
+GOPEAKS_RELEASE_VERSION: "v0.1.7"
+
+# which genomic intervals to remove from peak calling?
+BANLIST: "/home/groups/MaxsonLab/indices/GRch38/hg38.blacklist.v2.bed"
+
+# fastqc screen config file
+FASTQ_SCREEN_CONFIG: "src/fastq_screen.tsv"
+
+# For SEACR, only call top <proportion> of peak candidates as peaks.
+SEACR_THRESHOLD: 0.20
+
+# For a peak, how many times should it appear across replicates to be considered a consensus peak?
+# It should technically be separated by mark as well, but 2 makes sense for all marks in THIS comparison because there are similar number of biological replicates. 
+CONSENSUS_COUNT:
+    K562: 2
+    Kasumi: 2
+    Pt176: 2
+
+# genome annotation file for finding peak fragments at promoters
+GTF: "src/Homo_sapiens.GRCh38.101.gtf.gz"
+
+# gold standard comparison for evaluating algorithms
+STANDARDS:
+    K562_1_H3K4me3: "src/standards/ENCFF885FQN.1000.filtered.bed"
+    K562_2_H3K4me3: "src/standards/ENCFF885FQN.1000.filtered.bed"
+    K562_1_H3K27Ac: "src/standards/ENCFF403DTU.1000.filtered.bed"
+    K562_2_H3K27Ac: "src/standards/ENCFF403DTU.1000.filtered.bed"
+    K562_1_H3K4me1: "src/standards/ENCFF759NWD.1000.filtered.bed"
+    K562_2_H3K4me1: "src/standards/ENCFF759NWD.1000.filtered.bed"
+    # Reproduce Figure 3A from SEACR paper
+    K562_1_H3K4me2: "src/standards/ENCFF749KLQ.1000.filtered.bed"
+    K562_2_H3K4me2: "src/standards/ENCFF749KLQ.1000.filtered.bed"

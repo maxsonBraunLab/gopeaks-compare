@@ -1,2 +1,7 @@
-**/data
-.snakemake
+data/
+.snakemake/
+.RData
+.Rhistory
+LICENSE
+jobs/
+

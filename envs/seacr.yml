@@ -1,0 +1,8 @@
+name: seacr
+channels:
+  - anaconda
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=3.6.1
+  - bedtools=2.30.0

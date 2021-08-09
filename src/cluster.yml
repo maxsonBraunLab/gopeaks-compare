@@ -1,8 +1,0 @@
-__default__:
-    mem: 2500
-    partition: "exacloud"
-    time: 14400
-    nodes: 1
-    cpus-per-task: 2
-bowtie2:
-    cpus-per-task: 8
