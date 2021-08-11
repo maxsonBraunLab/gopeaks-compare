@@ -49,7 +49,8 @@ rule all:
         # quality control -------------------------------------------
         expand("data/fastqc/{read}.html", read=reads),
         expand("data/fastq_screen/{read}_screen.txt", read=reads),
-        expand(["data/ban/{sample}.ban.sorted.markd.bam",
+        expand([
+                # "data/ban/{sample}.ban.sorted.markd.bam",
                 "data/tracks/{sample}.bw",
                 ], sample=samps),
         expand(["data/preseq/lcextrap_{sample}.txt",
@@ -77,8 +78,8 @@ rule all:
         "data/fragments",
         "data/GO",
         # custom figures --------------------------------------------
-        "data/figures/peak-counts.png",
-        "data/figures/FRiP.png",
+        "data/figures/peak-counts",
+        "data/figures/FRiP",
         "data/figures/consensus_signal",
         "data/figures/exclusive_signal",
         "data/figures/promoter_fragment.png",
@@ -91,11 +92,6 @@ rule all:
         expand("data/model_evaluation/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) )
-
-# try out different normalization schemes for ROC curves
-# expand("data/evaluate_rpkm/{method}_{sample}.txt",
-#     method = all_methods],
-#     sample = list(config["STANDARDS"].keys()) ),
 
 # fastqc for each read
 rule fastqc:
@@ -174,23 +170,23 @@ rule sort:
     shell:
         "sambamba sort --tmpdir=data/aligned -t {threads} -o {output} {input} > {log} 2>&1"
 
-rule markdup:
-    input:
-        rules.sort.output
-    output:
-        "data/markd/{sample}.sorted.markd.bam"
-    conda:
-        "envs/sambamba.yml"
-    threads: 4
-    log:
-        "data/logs/sambamba_markdup_{sample}.log"
-    shell:
-        "sambamba markdup --tmpdir=data/markd -t {threads} {input} {output} > {log} 2>&1"
+# rule markdup:
+#     input:
+#         rules.sort.output
+#     output:
+#         "data/markd/{sample}.sorted.markd.bam"
+#     conda:
+#         "envs/sambamba.yml"
+#     threads: 4
+#     log:
+#         "data/logs/sambamba_markdup_{sample}.log"
+#     shell:
+#         "sambamba markdup --tmpdir=data/markd -t {threads} {input} {output} > {log} 2>&1"
 
 # remove reads in blacklist regions
 rule banlist:
     input:
-        rules.markdup.output
+        rules.sort.output
     output:
         "data/ban/{sample}.ban.sorted.markd.bam"
     conda:
