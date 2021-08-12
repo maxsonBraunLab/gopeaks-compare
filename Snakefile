@@ -77,8 +77,8 @@ rule all:
         "data/fragments",
         "data/GO",
         # custom figures --------------------------------------------
-        "data/figures/peak-counts.png",
-        "data/figures/FRiP.png",
+        "data/figures/peak-counts",
+        "data/figures/FRiP",
         "data/figures/consensus_signal",
         "data/figures/exclusive_signal",
         "data/figures/promoter_fragment.png",
@@ -91,11 +91,6 @@ rule all:
         expand("data/model_evaluation/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) )
-
-# try out different normalization schemes for ROC curves
-# expand("data/evaluate_rpkm/{method}_{sample}.txt",
-#     method = all_methods],
-#     sample = list(config["STANDARDS"].keys()) ),
 
 # fastqc for each read
 rule fastqc:
