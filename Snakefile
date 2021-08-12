@@ -399,7 +399,7 @@ rule heatmap:
         directory("data/computeMatrix"),
         directory("data/plotHeatmap")
     conda:
-        "envs/heatmap.yml"
+        "envs/dtools.yml"
     threads: 16
     shell:
         "bash src/custom/heatmap.sh -i {input[0]}"
@@ -411,7 +411,7 @@ rule intervene:
     output:
         directory("data/intervene")
     conda:
-        "envs/heatmap.yml"
+        "envs/dtools.yml"
     shell:
         "bash src/custom/intervene.sh -i {input}"
 
