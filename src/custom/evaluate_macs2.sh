@@ -45,9 +45,9 @@ for pval in $sample_pvals; do
 	# subset peaks above and below the walking pvalue threshold.
 	predicted_truth=$(echo "$sample_file" | awk -v p=$pval '$11 <= p')
 	predicted_false=$(echo "$sample_file" | awk -v p=$pval '$11 > p')
-	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -f 0.50 -a - -b $standard | wc -l)
+	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
 	FP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
-	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -f 0.50 -a - -b $standard | wc -l)
+	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
 	TN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
 
 	# calculate precision, recall, F1. export results.

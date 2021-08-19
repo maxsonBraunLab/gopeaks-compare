@@ -59,6 +59,9 @@ rule all:
             method = all_methods,
             sample = samps,
             ext = ["png", "tsv"]),
+        expand("data/plotEnrichment_consensus/{method}_{sample}.tsv",
+            method = all_methods,
+            sample = sample_noigg),
         # peak calling ----------------------------------------------
         "src/gopeaks",
         "src/SEACR-1.3/SEACR_1.3.sh",
@@ -84,11 +87,13 @@ rule all:
         "data/figures/promoter_fragment.png",
         "data/figures/peak_distances",
         "data/figures/GO/exclusive",
-        "data/figures/GO/consensus",
         "data/figures/roc",
         "data/figures/pr",
         # model evaluation ------------------------------------------
         expand("data/model_evaluation/{method}_{sample}.txt",
+            method = all_methods,
+            sample = list(config["STANDARDS"].keys()) ),
+        expand("data/model_evaluation_consensus_peaks/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) )
 
@@ -306,26 +311,8 @@ rule gopeaks:
         "data/logs/gopeaks_{sample}.log"
     shell:
         "{input.gopeaks} -bam {input.sample} {params.igg} -mdist 1000 -of {output} > {log} 2>&1"
-# input.igg requires the IgG bam file, even if treatment is IgG.
-# however, params.igg will mask input.igg if treatment is IgG.
+# input.igg requires the IgG bam file, even if treatment is IgG. however, params.igg will mask input.igg if treatment is IgG.
 # so treatment file != control file for all samples.
-
-# get consensuspeaks
-# rule consensus:
-#     input:
-#        macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
-#        gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
-#        seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
-#        seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
-#     output:
-#         directory("data/consensus"),
-#         all_groups = "data/consensus/all_groups.txt"
-#     conda:
-#        "envs/consensus.yml"
-#     log:
-#        "data/logs/consensus.log"
-#     script:
-#         "src/custom/consensus_peaks.R"
 
 rule consensus:
     input:
@@ -469,8 +456,7 @@ rule gene_ontology:
         "data/intervene"
     output:
         directory("data/GO"),
-        directory("data/figures/GO/exclusive"),
-        directory("data/figures/GO/consensus")
+        directory("data/figures/GO/exclusive")
     conda:
         "envs/gene_ontology.yml"
     script:
@@ -486,25 +472,17 @@ rule encode:
     shell:
         "bash src/custom/encode.sh"
 
-
-# count reads at the replicate level at all called peaks. These have lots of biological replicate variation!
-# rule sample_signal:
-#     input:
-#         "data/consensus"
-#     output:
-#         directory("data/sample_signal")
-#     conda:
-#         "envs/bedtools.yml"
-#     threads: 8
-#     shell:
-#         "bash src/custom/sample_signal.sh"
-
-# rule sample_signal_plot:
-#     input:
-#         "data/sample_signal"
-#     output:
-#         directory("data/figures/sample_signal")
-#     conda:
-#         "envs/plot.yml"
-#     script:
-#         "src/custom/sample_signal.R"
+rule plotEnrichment_consensus:
+    input:
+        "data/consensus/{method}_{condition}_{mark}.bed",
+        "data/ban/{condition}_{replicate}_{mark}.ban.sorted.markd.bam"
+    output:
+        "data/plotEnrichment_consensus/{method}_{condition}_{replicate}_{mark}.png",
+        "data/plotEnrichment_consensus/{method}_{condition}_{replicate}_{mark}.tsv"
+    conda:
+        "envs/dtools.yml"
+    log:
+        "data/logs/plotEnrichment_consensus_{method}_{condition}_{replicate}_{mark}.log"
+    shell:
+        "plotEnrichment -b {input[1]} --BED {input[0]} --regionLabels 'frip' "
+        "--outRawCounts {output[1]} -o {output[0]} > {log} 2>&1"

@@ -6,9 +6,24 @@ library(biomaRt)
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 library(ggplot2)
 library(data.table)
+library(RColorBrewer)
 
 conflicted::conflict_prefer("select", "dplyr")
 conflicted::conflict_prefer("filter", "dplyr")
+
+if (!dir.exists("data/GO/gopeaks_consensus_exclusive")) {
+  dir.create("data/GO/gopeaks_consensus_exclusive")
+} else {
+  unlink("data/GO/gopeaks_consensus_exclusive", recursive = TRUE)
+  dir.create("data/GO/gopeaks_consensus_exclusive")
+}
+
+if (!dir.exists("data/GO/consensus_venn")) {
+  dir.create("data/GO/consensus_venn")
+} else {
+  unlink("data/GO/consensus_venn", recursive = TRUE)
+  dir.create("data/GO/consensus_venn")
+}
 
 # functions -----------------------------------------------------------------------------
 runGO <- function(geneList,xx=xx,otype,setName, Dir, printTree = 1) {
@@ -187,3 +202,137 @@ for (i in 1:nrow(group_keys)) {
   ggsave(outfile, tmp_plot, width = 16, height = 9, units = "in")
   
 }
+
+# analyze consensus peaks ---------------------------------------------------------------
+
+all_consensus_beds <- list.files("data/consensus/", pattern = "*.bed", full.names = TRUE)
+consensus_peak_files <- lapply(all_consensus_beds, readPeakFile)
+consensus_peak_anno <- lapply(consensus_peak_files, function(x) {
+  annotatePeak(x, c(-3e3, 3e3), TxDb = txdb)
+})
+
+names(consensus_peak_anno) <- lapply(all_consensus_beds, function(x) {
+  str_replace(basename(x), ".bed", "")  
+})
+
+for (i in names(consensus_peak_anno)) {
+  dir.create(paste0("data/GO/consensus/", i), recursive = TRUE)
+}
+
+# gene ontology for consensus peaks
+go_results <- list()
+for (x in names(consensus_peak_anno)) {
+  
+  temp_anno <- consensus_peak_anno[[x]]
+  
+  # do not run GO if there are < 10 exclusive peaks
+  if (length(temp_anno@anno) < 10) {
+    
+    print(paste("WARNING:", x, "had < 10 exclusive peaks. topGO will not be run on this peak set."))
+    go_results[[x]] <- "too short"
+    
+  } else {
+    
+    # convert entrez ID (from ChIPseekeR) to gene name, then remove genes that have blanks as a name.
+    method_consensus_genes <- subset(gene_id_name, entrezgene_id %in% temp_anno@anno$geneId) %>%
+      dplyr::select(external_gene_name) %>%
+      filter(external_gene_name != "")
+    method_consensus_genes <- as.character(method_consensus_genes$external_gene_name)
+    
+    # if we annotated a peak with a gene name and find it in the gene universe, set named list value to 1. Otherwise 0.
+    method_consensus_gene_list <- factor(as.integer(gene_universe %in% method_consensus_genes))
+    names(method_consensus_gene_list) <- gene_universe
+    
+    # run gene ontology and export results to own directory
+    temp_GO <- runGO(geneList = method_consensus_gene_list, xx = xx,
+                     otype = "BP", setName = x,
+                     Dir = paste0("data/GO/consensus/", x))
+    go_results[[x]] <- temp_GO
+  }
+  
+}
+
+# set analysis for consensus GOs + unique GO's by method --------------------------------
+
+all_consensus_go <- list.files("data/GO/consensus", pattern = "*.txt", recursive = TRUE, full.names = TRUE)
+
+all_consensus_content_list <- lapply(all_consensus_go, function(x) {
+  
+  # define sample info 
+  sample_file <- basename(x)
+  method <- str_split(sample_file, "_")[[1]][1]
+  condition <- str_split(sample_file, "_")[[1]][2]
+  mark <- str_split(sample_file, "_")[[1]][3]
+  
+  # import content, add identifying cols
+  fread(x, header = TRUE, sep = "\t") %>%
+    mutate(method = method) %>%
+    mutate(condition = condition) %>%
+    mutate(mark = mark) %>%
+    select(-classicFisher) %>%
+    # mutate(classicFisher = as.double(classicFisher)) %>%
+    filter(p.adj < 0.3)
+  
+})
+
+unique_list_items <- function(x, var) {
+  
+  # input: x = named list. var = string of variable of interest, must be a name in x. 
+  # method: take set difference of var and the rest of the other lists
+  # output: list
+  
+  if (var %in% names(x)) {
+    
+    list_of_interest <- x[[var]]
+    other_lists <- unlist(unname(  x[names(x)[!grepl(var, names(x))]]  )) # subset x by names != var. unname and unlist to mix all the GOs.
+    unique_items_in_var <- setdiff(list_of_interest, other_lists)
+    return(unique_items_in_var)
+
+  }
+}
+
+all_methods <- c("gopeaks", "macs2", "seacr-relaxed", "seacr-stringent")
+
+all_consensus_content %>% 
+  group_by(condition, mark) %>% 
+  group_walk(.keep = TRUE, .f = function(x, y) {
+    
+    # x = grouped dataframe
+    # y = group keys in dataframe format
+    
+    # group GO DF by condition,mark then split DF by method
+    # to get named list. key = method. value = GO terms.
+    tmp_go_results_by_methods <- split(x, x$method)
+    tmp_go_results_by_methods <- lapply(tmp_go_results_by_methods, function(x) {x$GO.ID})
+    
+    # file I/O
+    outpdf=paste0("data/GO/consensus_venn/", y$condition, "_", y$mark , ".pdf")
+    
+    # venn diagram of GO terms split by method
+    venn_title <- paste(y$condition, y$mark, "Consensus Peak GO terms by method")
+    p <- ggvenn(tmp_go_results_by_methods, 
+                fill_color = rev(brewer.pal(4, "RdYlBu")),
+                fill_alpha = 0.75,
+                stroke_size = 0,
+                stroke_alpha = 0.75)
+    
+    pdf(outpdf, width = 8, height = 6)
+    plot(p)
+    dev.off()
+    
+    for (method in all_methods) {
+
+      # unique GO term by method
+      unique_terms <- unique_list_items(tmp_go_results_by_methods, method)
+
+      # file I/O
+      out_table <- paste0("data/GO/consensus_peak_exclusive_go/", method, "_", y$condition, "_", y$mark, ".txt")
+
+      x %>%
+        filter(GO.ID %in% unique_terms) %>%
+        filter(method == method) %>%
+        write.table(., out_table, quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+
+    }
+    
+  })

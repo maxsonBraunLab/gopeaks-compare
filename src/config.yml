@@ -51,6 +51,8 @@ STANDARDS:
     K562_2_H3K27Ac: "src/standards/ENCFF403DTU.1000.filtered.bed"
     K562_1_H3K4me1: "src/standards/ENCFF759NWD.1000.filtered.bed"
     K562_2_H3K4me1: "src/standards/ENCFF759NWD.1000.filtered.bed"
+    Kasumi_2_H3K27Ac: "src/standards/Kasumi_H3K27Ac.bed"
+    Kasumi_3_H3K27Ac: "src/standards/Kasumi_H3K27Ac.bed"
     # Reproduce Figure 3A from SEACR paper
     K562_1_H3K4me2: "src/standards/ENCFF749KLQ.1000.filtered.bed"
     K562_2_H3K4me2: "src/standards/ENCFF749KLQ.1000.filtered.bed"
