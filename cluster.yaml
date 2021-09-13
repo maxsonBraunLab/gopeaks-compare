@@ -10,7 +10,7 @@ __default__:
 bowtie2:
     cpus-per-task: 8
 sample_signal:
-    cpus-per-task: 12
+    mem: 64G
 gopeaks:
     mem: 16G
 pr_gopeaks:

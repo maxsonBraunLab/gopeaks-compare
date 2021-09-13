@@ -19,7 +19,6 @@ include: "rules/model_evaluation.py"
 
 st = pd.read_table('samplesheet.tsv').set_index('sample',drop=False)
 validate(st, schema="schemas/samples.schema.yml")
-# paramspace=Paramspace(pd.read_csv("src/precision_recall_params.tsv", sep = "\t"), filename_params=['pval'])
 
 samps = get_samples()
 reads= get_reads()
@@ -95,7 +94,11 @@ rule all:
             sample = list(config["STANDARDS"].keys()) ),
         expand("data/model_evaluation_consensus_peaks/{method}_{sample}.txt",
             method = all_methods,
-            sample = list(config["STANDARDS"].keys()) )
+            sample = list(config["STANDARDS"].keys()) ),
+        # sample signal ---------------------------------------------
+        expand("data/sample_signal/{method}_{sample}.bed",
+            method = all_methods,
+            sample = sample_noigg )
 
 # fastqc for each read
 rule fastqc:
@@ -353,11 +356,37 @@ rule consensus_signal:
     shell:
         "bash src/custom/consensus_signal.sh"
 
-rule consensus_signal_plot:
+rule sample_signal:
     input:
-        "data/consensus_signal"
+        gopeaks = "data/gopeaks/{sample}.bed",
+        macs2 = "data/macs2/{sample}_peaks.narrowPeak",
+        seacr_relaxed = "data/seacr/{sample}.relaxed.bed",
+        seacr_stringent = "data/seacr/{sample}.stringent.bed",
+        bam = "data/ban/{sample}.ban.sorted.markd.bam"
     output:
-        directory("data/figures/consensus_signal")
+        gopeaks = "data/sample_signal/gopeaks_{sample}.bed",
+        macs2 = "data/sample_signal/macs2_{sample}.bed",
+        seacr_relaxed = "data/sample_signal/seacr-relaxed_{sample}.bed",
+        seacr_stringent = "data/sample_signal/seacr-stringent_{sample}.bed"
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        """
+        cut -f 1-3 {input.gopeaks} | bedtools intersect -C -a stdin -b {input.bam} > {output.gopeaks}
+        cut -f 1-3 {input.macs2} | bedtools intersect -C -a stdin -b {input.bam} > {output.macs2}
+        cut -f 1-3 {input.seacr_relaxed} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_relaxed}
+        cut -f 1-3 {input.seacr_stringent} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_stringent}
+        """
+
+rule signal_plot:
+    input:
+        "data/consensus_signal",
+        expand("data/sample_signal/{method}_{sample}.bed",
+            method = all_methods,
+            sample = sample_noigg)
+    output:
+        directory("data/figures/consensus_signal"),
+        directory("data/figures/sample_signal")
     conda:
         "envs/plot.yml"
     script:
