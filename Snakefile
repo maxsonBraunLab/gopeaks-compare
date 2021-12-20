@@ -15,7 +15,8 @@ min_version("5.32")
 include: "src/common.py"
 configfile: "src/config.yml"
 include: "rules/peaks.py"
-include: "rules/model_evaluation.py"
+include: "rules/evaluate_models.py"
+include: "rules/evaluate_counts.py"
 
 st = pd.read_table('samplesheet.tsv').set_index('sample',drop=False)
 validate(st, schema="schemas/samples.schema.yml")
@@ -58,12 +59,13 @@ rule all:
             method = all_methods,
             sample = samps,
             ext = ["png", "tsv"]),
-        expand("data/plotEnrichment_consensus/{method}_{sample}.tsv",
-            method = all_methods,
-            sample = sample_noigg),
+        # expand("data/plotEnrichment_consensus/{method}_{sample}.tsv",
+        #     method = all_methods,
+        #     sample = sample_noigg),
         # peak calling ----------------------------------------------
         "src/gopeaks",
         "src/SEACR-1.3/SEACR_1.3.sh",
+        "src/SEACR-1.4/SEACR_1.4.sh",
         expand("data/gopeaks/{sample}.bed", sample = samps),
         expand("data/macs2/{sample}_peaks.xls", sample = samps),
         expand("data/seacr/{sample}.{type}.bed",
@@ -71,34 +73,36 @@ rule all:
             type = ["relaxed", "stringent"]),
         # custom analyses -------------------------------------------
         "data/consensus", "data/consensus/all_groups.txt",
-        "data/consensus_signal",
         "data/exclusive_signal",
         "data/computeMatrix",
         "data/plotHeatmap",
         "data/intervene",
-        "data/fragments",
-        "data/GO",
+        # "data/GO",
         # custom figures --------------------------------------------
         "data/figures/peak-counts",
         "data/figures/FRiP",
-        "data/figures/consensus_signal",
-        "data/figures/exclusive_signal",
-        "data/figures/promoter_fragment.png",
-        "data/figures/peak_distances",
-        "data/figures/GO/exclusive",
+        # "data/figures/consensus_peak_plots",
+        "data/figures/peak_plots",
+        # "data/figures/exclusive_signal",
+        # "data/figures/GO/exclusive",
         "data/figures/roc",
         "data/figures/pr",
         # model evaluation ------------------------------------------
-        expand("data/model_evaluation/{method}_{sample}.txt",
+        # use different ranking metrics and raw counts
+        expand("data/evaluate_models/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) ),
-        expand("data/model_evaluation_consensus_peaks/{method}_{sample}.txt",
+        expand("data/evaluate_counts/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) ),
+        "data/figures/roc",
+        "data/figures/pr",
+        "data/figures/roc_counts",
+        "data/figures/pr_counts",
         # sample signal ---------------------------------------------
-        expand("data/sample_signal/{method}_{sample}.bed",
+        expand("data/peak_counts/{method}_{sample}.bed",
             method = all_methods,
-            sample = sample_noigg )
+            sample = sample_noigg)
 
 # fastqc for each read
 rule fastqc:
@@ -356,7 +360,7 @@ rule consensus_signal:
     shell:
         "bash src/custom/consensus_signal.sh"
 
-rule sample_signal:
+rule peak_counts:
     input:
         gopeaks = "data/gopeaks/{sample}.bed",
         macs2 = "data/macs2/{sample}_peaks.narrowPeak",
@@ -364,10 +368,10 @@ rule sample_signal:
         seacr_stringent = "data/seacr/{sample}.stringent.bed",
         bam = "data/ban/{sample}.ban.sorted.markd.bam"
     output:
-        gopeaks = "data/sample_signal/gopeaks_{sample}.bed",
-        macs2 = "data/sample_signal/macs2_{sample}.bed",
-        seacr_relaxed = "data/sample_signal/seacr-relaxed_{sample}.bed",
-        seacr_stringent = "data/sample_signal/seacr-stringent_{sample}.bed"
+        gopeaks = "data/peak_counts/gopeaks_{sample}.bed",
+        macs2 = "data/peak_counts/macs2_{sample}.bed",
+        seacr_relaxed = "data/peak_counts/seacr-relaxed_{sample}.bed",
+        seacr_stringent = "data/peak_counts/seacr-stringent_{sample}.bed"
     conda:
         "envs/bedtools.yml"
     shell:
@@ -378,19 +382,19 @@ rule sample_signal:
         cut -f 1-3 {input.seacr_stringent} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_stringent}
         """
 
-rule signal_plot:
+rule peak_plot:
     input:
-        "data/consensus_signal",
-        expand("data/sample_signal/{method}_{sample}.bed",
+        # "data/consensus_signal",
+        expand("data/peak_counts/{method}_{sample}.bed",
             method = all_methods,
             sample = sample_noigg)
     output:
-        directory("data/figures/consensus_signal"),
-        directory("data/figures/sample_signal")
+        # directory("data/figures/consensus_peak_plots"),
+        directory("data/figures/peak_plots")
     conda:
         "envs/plot.yml"
     script:
-        "src/custom/consensus_signal.R"
+        "src/custom/peak_plots.R"
 
 # count basic peak statistics like peak counts, FRiP at the sample level.
 # 'data/consensus' input ensures peak-calling is finished.
@@ -419,6 +423,18 @@ rule heatmap:
     threads: 16
     shell:
         "bash src/custom/heatmap.sh -i {input[0]}"
+
+rule scaledHeatmap:
+    input:
+        "data/consensus/all_groups.txt",
+        "data/intervene",
+        "data/computeMatrix"
+    output:
+        directory("data/scaledHeatmap")
+    conda:
+        "envs/dtools.yml"
+    shell:
+        "bash src/custom/scaledHeatmap.sh -i {input[0]}"
 
 # venn diagram of consensus peaks
 rule intervene:

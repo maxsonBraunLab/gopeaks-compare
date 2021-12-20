@@ -28,6 +28,12 @@ rule get_seacr:
 	shell:
 		"bash src/wget_seacr.sh"
 
+rule get_seacr_14:
+	output:
+		"src/SEACR-1.4/SEACR_1.4.sh"
+	shell:
+		"git clone --branch SEACRv1.4_dev git@github.com:FredHutch/SEACR.git src/SEACR-1.4"
+
 rule name_sort:
 	input:
 		"data/ban/{sample}.ban.sorted.markd.bam"
@@ -56,7 +62,8 @@ rule bedgraph:
 
 rule seacr_relaxed:
 	input:
-		seacr = rules.get_seacr.output,
+		seacr = rules.get_seacr.output, # v1.3
+		# seacr = rules.get_seacr_14.output, # v1.4
 		sample = rules.bedgraph.output,
 		igg = get_igg
 	output:
@@ -69,11 +76,13 @@ rule seacr_relaxed:
 	log:
 		"data/logs/seacr-relaxed_{sample}.log"
 	shell:
-		"bash {input.seacr} {input.sample} {params.igg} {params.norm} relaxed data/seacr/{wildcards.sample} > {log} 2>&1"
+		"bash {input.seacr} {input.sample} {params.igg} {params.norm} relaxed data/seacr/{wildcards.sample} > {log} 2>&1" # SEACR v1.3
+		# "bash {input.seacr} -b {input.sample} -c {params.igg} -n {params.norm} -m relaxed -o data/seacr/{wildcards.sample} > {log} 2>&1" # SEACR v1.4
 
 rule seacr_stringent:
 	input:
-		seacr = rules.get_seacr.output,
+		seacr = rules.get_seacr.output, # v1.3
+		# seacr = rules.get_seacr_14.output,
 		sample = rules.bedgraph.output,
 		igg = get_igg
 	output:
@@ -86,7 +95,8 @@ rule seacr_stringent:
 	log:
 		"data/logs/seacr-stringent_{sample}.log"
 	shell:
-		"bash {input.seacr} {input.sample} {params.igg} {params.norm} stringent data/seacr/{wildcards.sample} > {log} 2>&1"
+		"bash {input.seacr} {input.sample} {params.igg} {params.norm} stringent data/seacr/{wildcards.sample} > {log} 2>&1" # SEACR v1.3
+		# "bash {input.seacr} -b {input.sample} -c {params.igg} -n {params.norm} -m stringent -o data/seacr/{wildcards.sample} > {log} 2>&1" # SEACR v1.4
 
 # FRiP --------------------------------------------------------------------------------------------
 

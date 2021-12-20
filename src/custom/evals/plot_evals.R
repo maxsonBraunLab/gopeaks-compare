@@ -11,8 +11,10 @@ dir.create("data/figures/roc", recursive = TRUE)
 dir.create("data/figures/pr", recursive = TRUE)
 
 # import confusion matrices -----------------------------------------------------------------------
-model_list <- lapply(list.files("data/model_evaluation/", full.names = TRUE), read.table, sep = "\t", header = TRUE)
+model_list <- lapply(list.files("data/evaluate_models/", full.names = TRUE), read.table, sep = "\t", header = TRUE)
 model_df <- bind_rows(model_list) %>% mutate(sample = paste(condition, replicate, mark, sep = "_"))
+
+print(head(model_df))
 
 model_df$replicate <- as.factor(model_df$replicate)
 model_df <- model_df %>% 
@@ -55,13 +57,13 @@ for (i in 1:nrow(group_keys)) {
   
   tmp_pr <- ggplot(tmp_df, aes_string(x = "recall", y = "precision", color = "method")) +
     geom_path(size = 2) +
-    xlim(c(0,1)) +
     xlab("Recall") +
     ylab("Precision") +
-    facet_wrap(sample ~ ., scales = "free_y") +
+    facet_wrap(sample ~ .) +
     scale_color_brewer(palette = "RdYlBu", direction = -1) +
     theme_minimal() +
-    theme(plot.background = element_rect(fill = "white"))
+    theme(plot.background = element_rect(fill = "white")) +
+    scale_x_continuous(breaks = c(seq(0.05, 0.95, 0.20)), limits = c(0.05, 0.95))
   
   ggsave(out_roc, tmp_roc, width = 16, height = 9, dpi = 600)
   ggsave(out_pr, tmp_pr, width = 16, height = 9, dpi = 600)
