@@ -23,11 +23,23 @@ if (!dir.exists("data/figures/FRiP")) {
     dir.create("data/figures/FRiP")
 }
 
-if (!dir.exists("data/figures/peak_distances")) {
-    dir.create("data/figures/peak_distances")
+if (!dir.exists("data/figures/peak-distances")) {
+    dir.create("data/figures/peak-distances")
 } else {
-    unlink("data/figures/peak_distances", recursive = TRUE)
-    dir.create("data/figures/peak_distances")
+    unlink("data/figures/peak-distances", recursive = TRUE)
+    dir.create("data/figures/peak-distances")
+}
+
+method_finder = function(filename) {
+  if (str_detect(filename, "gopeaks")) {
+    return("gopeaks")
+  } else if (str_detect(filename, "macs2")) {
+    return("macs2")
+  } else if (str_detect(filename, "relaxed")) {
+    return("seacr-relaxed")
+  } else if (str_detect(filename, "stringent")) {
+    return("seacr-stringent")
+  }
 }
 
 # count peaks -------------------------------------------------------------------------------------
@@ -35,45 +47,31 @@ if (!dir.exists("data/figures/peak_distances")) {
 print("Counting peaks at the replicate level")
 
 gopeaks <- list.files("data/gopeaks", pattern = "*.bed", full.names = TRUE, recursive = TRUE)
-seacr_stringent <- list.files("data/seacr", pattern = "*stringent*.bed", full.names = TRUE, recursive = TRUE)
+macs2 <- list.files("data/macs2", pattern = "Peak", full.names = TRUE, recursive = TRUE)
 seacr_relaxed <- list.files("data/seacr", pattern = "*relaxed*.bed", full.names = TRUE, recursive = TRUE)
-macs2 <- list.files("data/macs2", pattern = "*.narrowPeak", full.names = TRUE, recursive = TRUE)
+seacr_stringent <- list.files("data/seacr", pattern = "*stringent*.bed", full.names = TRUE, recursive = TRUE)
 
-macs2_df <- data.frame(sample = str_replace(basename(macs2), "_peaks.*", ""),
-                       method = "macs2",
-                       file = macs2)
+peaks_df = bind_rows(lapply(c(gopeaks, macs2, seacr_relaxed, seacr_stringent), function(x) {
+  # file i/o
+  sample = strsplit(basename(x), "\\.")[[1]][1]
+  condition = strsplit(sample, "_")[[1]][1]
+  replicate = strsplit(sample, "_")[[1]][2]
+  mark = strsplit(sample, "_")[[1]][3]
+  peaks = nrow(read.table(x)) # assume each line is a peak.
+  method = method_finder(x)
 
-seacr_relaxed_df <- data.frame(sample = str_replace(basename(seacr_relaxed), ".relaxed.bed", ""),
-                               method = "seacr-relaxed",
-                               file = seacr_relaxed)
-
-seacr_stringent_df <- data.frame(sample = str_replace(basename(seacr_stringent), ".stringent.bed", ""),
-                               method = "seacr-stringent",
-                               file = seacr_stringent)
-
-gopeaks_df <- data.frame(sample = str_replace(basename(gopeaks), ".bed", ""),
-                               method = "gopeaks",
-                               file = gopeaks)
-
-peaks_df <- bind_rows(macs2_df, seacr_relaxed_df, seacr_stringent_df, gopeaks_df)
-
-# count peak files per sample
-peak_counts <- lapply(peaks_df$file, function(x) {
-    nrow(read.table(x, header = FALSE))
-  }
-)
-
-peaks_df <- peaks_df %>%
-              mutate(counts = unlist(peak_counts)) %>%
-              mutate(file = NULL) %>%
-              mutate(condition = gsub("(.*)_(.*)_(.*)", "\\1", sample)) %>%
-              mutate(replicate = gsub("(.*)_(.*)_(.*)", "\\2", sample)) %>%
-              mutate(mark = gsub("(.*)_(.*)_(.*)", "\\3", sample))
+  data.frame(method = method,
+             sample = sample,
+             condition = condition,
+             replicate = replicate,
+             mark = mark,
+             counts = peaks)
+})) %>% mutate(sample = str_replace(sample, "_peaks", "")) # fix macs2 _peaks suffix
 
 # define condition,mark groupings
 peak_groups <- peaks_df %>% group_by(condition, mark) %>% group_keys()
 
-# plot peak-peak distances for all condition,mark.
+# plot peak counts for all condition,mark.
 for (i in 1:nrow(peak_groups)) {
 
   # define condition,mark
@@ -92,6 +90,7 @@ for (i in 1:nrow(peak_groups)) {
   p <- peaks_by_condition_method %>%
     ggplot(aes_string(x = "replicate", y = "counts", fill = "method")) +
       geom_col(position = "dodge") +
+      geom_text(aes_string(label = "counts"), vjust = 2, color = "white", check_overlap = TRUE) +
       xlab("Replicates") +
       ylab("Number of Peaks") +
       scale_y_continuous(labels = scales::comma) +
@@ -99,23 +98,27 @@ for (i in 1:nrow(peak_groups)) {
       ggtitle("Peak Counts") +
       theme_minimal() +
       theme(plot.background = element_rect(fill = "white"))
-
-  print(p)
   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
 }
 
 # count consensus peaks ---------------------------------------------------------------------------
 
-peak_counts <- lapply(list.files("data/consensus", pattern = "*.bed", full.names = TRUE), function(x) {
-  nrow(read.table(x, header = FALSE))
-})
+print("Counting peaks at the consensus level")
 
-names(peak_counts) <- lapply(list.files("data/consensus", pattern = "*.bed", full.names = TRUE), function(x) {
-  str_replace(basename(x), ".bed", "")
-})
+peaks_df = bind_rows(lapply(list.files("data/consensus", pattern = "*.bed", full.names=TRUE), function(x) {
+  # file i/o
+  sample = strsplit(basename(x), "\\.")[[1]][1]
+  method = strsplit(sample, "_")[[1]][1]
+  condition = strsplit(sample, "_")[[1]][2]
+  mark = strsplit(sample, "_")[[1]][3]
+  peaks = nrow(read.table(x)) # assume each line is a peak.
 
-peaks_df <- data.frame(metadata = names(peak_counts), counts = unname(unlist(peak_counts))) %>% 
-  separate(metadata, into = c("method", "condition", "mark"), sep = "_")
+  data.frame(method = method,
+             sample = sample,
+             condition = condition,
+             mark = mark,
+             counts = peaks)
+}))
 
 peak_groups <- peaks_df %>% group_by(condition, mark) %>% group_keys
 
@@ -137,7 +140,7 @@ for (i in 1:nrow(peak_groups)) {
   p <- peaks_by_condition_method %>%
     ggplot(aes_string(x = "method", y = "counts", fill = "method")) +
     geom_col(position = "dodge") +
-    geom_text(aes_string(label = "counts"), vjust = 2, color = "white") +
+    geom_text(aes_string(label = "counts"), vjust = 2, color = "white", check_overlap = TRUE) +
     xlab("Method") +
     ylab("Number of Peaks") +
     scale_y_continuous(labels = scales::comma) +
@@ -145,55 +148,32 @@ for (i in 1:nrow(peak_groups)) {
     ggtitle(paste(temp_condition, temp_mark, "Consensus Peak Counts")) +
     theme_minimal() +
     theme(plot.background = element_rect(fill = "white"))
-  
-  print(p)
   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
-  
 }
 
 # FRiP --------------------------------------------------------------------------------------------
 
-print("Plotting FRiP")
+print("Plotting FRiP at the replicate level")
 
-gopeaks <- list.files("data/plotEnrichment", pattern = "gopeaks.*.tsv", full.names = TRUE, recursive = TRUE)
-seacr_stringent <- list.files("data/plotEnrichment", pattern = "seacr-stringent.*.tsv", full.names = TRUE, recursive = TRUE)
-seacr_relaxed <- list.files("data/plotEnrichment", pattern = "seacr-relaxed.*.tsv", full.names = TRUE, recursive = TRUE)
-macs2 <- list.files("data/plotEnrichment", pattern = "macs2.*.tsv", full.names = TRUE, recursive = TRUE)
+frip_df = bind_rows(lapply(list.files("data/plotEnrichment", pattern="*.tsv", full.names=TRUE), function(x) {
+  # file i/o
+  sample = strsplit(basename(x), "\\.")[[1]][1]
+  method = strsplit(sample, "_")[[1]][1]
+  condition = strsplit(sample, "_")[[1]][2]
+  replicate = strsplit(sample, "_")[[1]][3]
+  mark = strsplit(sample, "_")[[1]][4]
+  frip = read.table(x, header = TRUE)[1, "percent"]
 
-macs2_df <- data.frame(sample = str_replace(basename(macs2), "macs2_", ""),
-                       method = "macs2",
-                       file = macs2)
-seacr_relaxed_df <- data.frame(sample = str_replace(basename(seacr_relaxed), "seacr-relaxed_", ""),
-                               method = "seacr-relaxed",
-                               file = seacr_relaxed)
-seacr_stringent_df <- data.frame(sample = str_replace(basename(seacr_stringent), "seacr-stringent_", ""),
-                                 method = "seacr_stringent",
-                                 file = seacr_stringent)
-gopeaks_df <- data.frame(sample = str_replace(basename(gopeaks), "gopeaks_", ""),
-                         method = "gopeaks",
-                         file = gopeaks)
-peaks_df <- bind_rows(macs2_df, seacr_relaxed_df, seacr_stringent_df, gopeaks_df) %>%
-              mutate(sample = str_replace(sample, ".tsv", ""))
-
-# extract FRiP % per sample.
-sample_FRiP <- lapply(peaks_df$file, function(x) {
-    read.table(x, header = TRUE)[["percent"]]
-  }
-)
-
-# add frip column, emove file extensions for samples.
-peaks_df <- peaks_df %>% 
-  mutate(file = NULL) %>%
-  mutate(sample = str_replace(sample, ".tsv", "")) %>%
-  mutate(condition = gsub("(.*)_(.*)_(.*)", "\\1", sample)) %>%
-  mutate(replicate = gsub("(.*)_(.*)_(.*)", "\\2", sample)) %>%
-  mutate(mark = gsub("(.*)_(.*)_(.*)", "\\3", sample)) %>%
-  mutate(FRiP = unlist(sample_FRiP))
-
-print(peaks_df)
+  data.frame(method = method,
+             sample = sample,
+             condition = condition,
+             replicate = replicate,
+             mark = mark,
+             frip = frip)
+}))
 
 # define condition,mark groupings
-peak_groups <- peaks_df %>% group_by(condition, mark) %>% group_keys()
+peak_groups <- frip_df %>% group_by(condition, mark) %>% group_keys()
 
 # plot peak-peak distances for all condition,mark.
 for (i in 1:nrow(peak_groups)) {
@@ -203,7 +183,7 @@ for (i in 1:nrow(peak_groups)) {
   temp_mark = as.character(peak_groups[i, "mark"])
 
   # subset DF by condition,mark
-  peaks_by_condition_method <- peaks_df %>%
+  peaks_by_condition_method <- frip_df %>%
     filter(condition == temp_condition) %>%
     filter(mark == temp_mark)
 
@@ -212,7 +192,7 @@ for (i in 1:nrow(peak_groups)) {
 
   # plot peak counts
   p <- peaks_by_condition_method %>%
-    ggplot(aes(x = replicate, y = FRiP, fill = method)) +
+    ggplot(aes(x = replicate, y = frip, fill = method)) +
       geom_col(position = "dodge") +
       ylab("Fraction of Reads in Peaks") +
       xlab("Replicate") +
@@ -220,26 +200,31 @@ for (i in 1:nrow(peak_groups)) {
       scale_fill_brewer(palette = "RdYlBu", direction = -1) +
       theme_minimal() +
       theme(plot.background = element_rect(fill = "white"))
-
-  print(p)
   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
 }
 
 # FRiP consensus peaks ----------------------------------------------------------------------------
 
-FRiP <- lapply(list.files("data/plotEnrichment_consensus/", pattern = "*.tsv", full.names = TRUE), function(x) {
-  read.table(x, header = TRUE)[["percent"]]
-})
+print("Plotting FRiP at the consensus level")
 
-names(FRiP) <- lapply(list.files("data/plotEnrichment_consensus", pattern = "*.tsv", full.names = TRUE), function(x) {
-  str_replace(basename(x), ".tsv", "")
-})
+frip_df = bind_rows(lapply(list.files("data/plotEnrichment_consensus", pattern="*.tsv", full.names=TRUE), function(x) {
+  # file i/o
+  sample = strsplit(basename(x), "\\.")[[1]][1]
+  method = strsplit(sample, "_")[[1]][1]
+  condition = strsplit(sample, "_")[[1]][2]
+  replicate = strsplit(sample, "_")[[1]][3]
+  mark = strsplit(sample, "_")[[1]][4]
+  frip = read.table(x, header = TRUE)[1, "percent"]
 
-FRiP_df <- data.frame(metadata = names(FRiP), FRiP = unname(unlist(FRiP))) %>% 
-  separate(metadata, into = c("method", "condition", "replicate", "mark"), sep = "_") %>%
-  mutate(replicate = as.factor(replicate))
+  data.frame(method = method,
+             sample = sample,
+             condition = condition,
+             replicate = replicate,
+             mark = mark,
+             frip = frip)
+}))
 
-peak_groups <- FRiP_df %>% group_by(condition, mark) %>% group_keys
+peak_groups <- frip_df %>% group_by(condition, mark) %>% group_keys
 
 for (i in 1:nrow(peak_groups)) {
   
@@ -248,7 +233,7 @@ for (i in 1:nrow(peak_groups)) {
   temp_mark = as.character(peak_groups[i, "mark"])
   
   # subset DF by condition,mark
-  peaks_by_condition_mark <- FRiP_df %>%
+  peaks_by_condition_mark <- frip_df %>%
     filter(condition == temp_condition) %>%
     filter(mark == temp_mark)
   
@@ -257,9 +242,9 @@ for (i in 1:nrow(peak_groups)) {
   
   # plot FRiP
   p <- peaks_by_condition_mark %>%
-    ggplot(aes_string(x = "replicate", y = "FRiP", fill = "method")) +
+    ggplot(aes_string(x = "replicate", y = "frip", fill = "method")) +
     geom_bar(position = "dodge", stat = 'identity') +
-    geom_text(aes_string(x = "replicate", y = "FRiP", label = "FRiP"), position = position_dodge(width = 0.9), vjust = 2, color = "white") +
+    geom_text(aes_string(x = "replicate", y = "frip", label = "frip"), position = position_dodge(width = 0.9), vjust = 2, color = "white") +
     ylab("Fraction of Reads in Peaks") +
     xlab("Replicate") +
     ggtitle(paste(temp_condition, temp_mark, "FRiP at Consensus Peaks")) +
@@ -267,18 +252,15 @@ for (i in 1:nrow(peak_groups)) {
     scale_fill_brewer(palette = "RdYlBu", direction = -1) +
     theme_minimal() +
     theme(plot.background = element_rect(fill = "white"))
-  
-  print(p)
   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
 }
 
 # peak-peak distances -----------------------------------------------------------------------------
 
-print("Calculating peak-peak distances")
+print("Plotting peak-peak distances")
 
 # import all consensus peaks
-all_peaks <- lapply(list.files("data/consensus", pattern = "*.bed", full.names = TRUE), function(x) {
-
+all_peaks <- bind_rows(lapply(list.files("data/consensus", pattern = "*.bed", full.names = TRUE), function(x) {
   file = str_replace(basename(x), ".bed", "")
   method = str_split(file, "_")[[1]][1]
   condition = str_split(file, "_")[[1]][2]
@@ -288,11 +270,8 @@ all_peaks <- lapply(list.files("data/consensus", pattern = "*.bed", full.names =
     mutate(method = method) %>%
     mutate(condition = condition) %>%
     mutate(mark = mark) %>%
-    mutate(sample = paste(condition, mark, sep = "_")) %>%
-    mutate(peaks = nrow(.))
-})
-
-all_peaks <- bind_rows(all_peaks)
+    mutate(sample = paste(condition, mark, sep = "_"))
+}))
 
 # define condition,mark groupings
 peak_groups <- all_peaks %>% group_by(condition, mark) %>% group_keys()
@@ -321,17 +300,17 @@ for (i in 1:nrow(peak_groups)) {
     ggplot(aes_string(x = "distance", fill = "method", color = "method")) +
       geom_density(alpha = 0.5) +
       scale_x_log10() +
-      ggtitle(paste("Distance between closest peaks by method", temp_condition, temp_mark)) +
+      ggtitle(paste(temp_condition, temp_mark, "peak-peak distances")) +
       xlab("Distance (bp)") +
       scale_fill_brewer(palette = "RdYlBu", direction = -1) +
       scale_color_brewer(palette = "RdYlBu", direction = -1) +
       theme_minimal() +
       theme(plot.background = element_rect(fill = "white"))
 
-  peak_distance_dist <- paste0("data/figures/peak_distances/", temp_condition, "_", temp_mark, ".pdf")
+  peak_distance_dist <- paste0("data/figures/peak-distances/", temp_condition, "_", temp_mark, ".pdf")
   ggsave(peak_distance_dist, peak_distance_plot, width = 8, height = 6, units = "in", dpi = 600)
 
-  peak_distance_stat <- paste0("data/figures/peak_distances/", temp_condition, "_", temp_mark, ".txt")
+  peak_distance_stat <- paste0("data/figures/peak-distances/", temp_condition, "_", temp_mark, ".txt")
   bind_rows(distance_by_methods) %>%
     group_by(method) %>%
     summarise(avg_dist = mean(distance), stdev_dist = sd(distance), med_dist = median(distance)) %>%

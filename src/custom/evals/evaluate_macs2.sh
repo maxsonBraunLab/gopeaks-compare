@@ -1,22 +1,41 @@
 #!/bin/bash
 
-while getopts "i:s:" op
+while getopts "i:s:t:" op
 do
 	case "$op" in
 		i)  sample="$OPTARG";;
 		s)  standard="$OPTARG";;
+		t)  threads="$OPTARG";;
 		\?) exit 1;;
 	esac
 done
 
 # variables and functions ---------------------------------------------------------------
 
-calculate_positive_rates () {
+calculate_rate() {
 	awk -v true_term=$1 -v false_term=$2 'BEGIN {print true_term / (true_term + false_term)}' | cut -b1-5
 }
 
-calculate_f1_score () {
+calculate_f1_score() {
 	awk -v true_term=$1 -v false_term=$2 'BEGIN {print 2 * (true_term * false_term) / (true_term + false_term)}' | cut -b1-5
+}
+
+threshold() {
+	counts=$1
+	predicted_truth=$(cat $sample_file_handle | awk -v s=$1 '$11 <= s')
+	predicted_false=$(cat $sample_file_handle | awk -v s=$1 '$11 > s')
+	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
+	FP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
+	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
+	TN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
+
+	# calculate precision, recall, F1. export results.
+	precision=$(calculate_rate $TP $FP)
+	recall=$(calculate_rate $TP $FN)
+	fpr=$(calculate_rate $FP $TN)
+	f1=$(calculate_f1_score $precision $recall)
+
+	echo -e "$method\t$condition\t$replicate\t$mark\t$counts\t$TP\t$FP\t$FN\t$TN\t$precision\t$recall\t$fpr\t$f1"
 }
 
 # file I/O ------------------------------------------------------------------------------
@@ -35,35 +54,23 @@ echo -e "method\tcondition\treplicate\tmark\tsignal\tTP\tFP\tFN\tTN\tprecision\t
 
 # create a new column with pval in decimal form. Sort by that new column.
 # identify all pvals within a sample.
-sample_file=$(awk -v OFS='\t' '{print $0,10**-$9}' $file | sort -rg -k11)
+sample_file=$(awk -v OFS='\t' '{print $0,10**-$9}' $file | grep -vi "inf" | sort -rg -k11)
 sample_pvals=$(echo "$sample_file" | cut -f11 | uniq)
+sample_file_handle="data/evaluate_models/${method}_${condition}_${replicate}_${mark}.tmp.txt" # create tmp file to threshold from
+echo "$sample_file" > $sample_file_handle
 
-# pvalue threshold walk -----------------------------------------------------------------
+# export vars and fx to child processes
+export -f calculate_rate
+export -f threshold
+export -f calculate_f1_score
+if [ $method != "" ]; then export method; else echo "method $method is undefined" && exit 1; fi
+if [ $condition != "" ]; then export condition; else echo "condition $condition is undefined" && exit 1; fi
+if [ $replicate != "" ]; then export replicate; else echo "replicate $replicate is undefined" && exit 1; fi
+if [ $mark != "" ]; then export mark; else echo "mark $mark is undefined" && exit 1; fi
+if [ $sample != "" ]; then export sample; else echo "sample $sample is undefined" && exit 1; fi
+if [ $standard != "" ]; then export standard; else echo "standard $standard is undefined" && exit 1; fi
+export sample_file_handle
 
-for pval in $sample_pvals; do
+parallel --keep-order --trim lr -j $threads threshold ::: $sample_pvals # process peaks in parallel!
 
-	# subset peaks above and below the walking pvalue threshold.
-	predicted_truth=$(echo "$sample_file" | awk -v p=$pval '$11 <= p')
-	predicted_false=$(echo "$sample_file" | awk -v p=$pval '$11 > p')
-	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
-	FP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
-	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
-	TN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
-	f1=$(calculate_f1_score $precision $recall)
-
-	# calculate precision, recall, F1. export results.
-	precision=$(calculate_positive_rates $TP $FP)
-	recall=$(calculate_positive_rates $TP $FN)
-	fpr=$(calculate_positive_rates $FP $TN)
-
-	echo -e "$method\t$condition\t$replicate\t$mark\t$pval\t$TP\t$FP\t$FN\t$TN\t$precision\t$recall\t$fpr\t$f1"
-
-	# if [[ $(bc -l <<< "$fpr < 0.510") -eq 1 && $(bc -l <<< "$fpr > 0.490") -eq 1 ]]; then
-	# 	truth_out="data/model_evaluation/${method}_${condition}_${replicate}_${mark}_${fpr}.pred-truth.txt"
-	# 	echo "$predicted_truth" > $truth_out
-	# 	false_out="data/model_evaluation/${method}_${condition}_${replicate}_${mark}_${fpr}.pred-false.txt"
-	# 	echo "$predicted_truth" > $false_out
-	# fi
-
-done
-
+rm $sample_file_handle

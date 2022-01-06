@@ -17,6 +17,7 @@ configfile: "src/config.yml"
 include: "rules/peaks.py"
 include: "rules/evaluate_models.py"
 include: "rules/evaluate_counts.py"
+include: "rules/evaluate_consensus.py"
 
 st = pd.read_table('samplesheet.tsv').set_index('sample',drop=False)
 validate(st, schema="schemas/samples.schema.yml")
@@ -43,6 +44,7 @@ fastqScreenDict = {
 }
 
 all_methods = ["gopeaks", "macs2", "seacr-relaxed", "seacr-stringent"]
+all_groups = get_groups() # {method}_{condition}_{mark} no igg
 
 rule all:
     input:
@@ -72,37 +74,45 @@ rule all:
             sample = samps,
             type = ["relaxed", "stringent"]),
         # custom analyses -------------------------------------------
-        "data/consensus", "data/consensus/all_groups.txt",
         "data/exclusive_signal",
         "data/computeMatrix",
-        "data/plotHeatmap",
+        # "data/plotHeatmap",
+        # "data/scaledHeatmap",
         "data/intervene",
         # "data/GO",
         # custom figures --------------------------------------------
-        "data/figures/peak-counts",
-        "data/figures/FRiP",
-        # "data/figures/consensus_peak_plots",
-        "data/figures/peak_plots",
+        # "data/figures/peak-counts", "data/figures/peak-distances", "data/figures/FRiP",
+        # "data/figures/peak_plots",
         # "data/figures/exclusive_signal",
         # "data/figures/GO/exclusive",
-        "data/figures/roc",
-        "data/figures/pr",
         # model evaluation ------------------------------------------
         # use different ranking metrics and raw counts
+        expand("data/peak_counts/{method}_{sample}.bed",
+            method = all_methods,
+            sample = sample_noigg),
         expand("data/evaluate_models/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) ),
         expand("data/evaluate_counts/{method}_{sample}.txt",
             method = all_methods,
             sample = list(config["STANDARDS"].keys()) ),
-        "data/figures/roc",
-        "data/figures/pr",
-        "data/figures/roc_counts",
-        "data/figures/pr_counts",
-        # sample signal ---------------------------------------------
-        expand("data/peak_counts/{method}_{sample}.bed",
+        # "data/figures/roc",
+        # "data/figures/pr",
+        # "data/figures/roc_counts",
+        # "data/figures/pr_counts",
+        # consensus analyses ----------------------------------------
+        expand("data/consensus/{method}_{condition}_{mark}.bed", zip,
+            method = list(all_groups.method),
+            condition = list(all_groups.condition),
+            mark = list(all_groups.mark)),
+        expand("data/evaluate_consensus_counts/{method}_{sample}.txt",
             method = all_methods,
-            sample = sample_noigg)
+            sample = list(config["STANDARDS"].keys()) ),
+        "data/figures-evaluate-consensus-counts/roc_counts",
+        "data/figures-evaluate-consensus-counts/pr_counts",
+        "data/figures-evaluate-consensus-counts/consensus_peak_plots",
+        "data/consensus/consensus-standard-intersection/intersections-summary.txt",
+        "data/figures-evaluate-consensus-counts/consensus-peak-standard-intersections.pdf"
 
 # fastqc for each read
 rule fastqc:
@@ -220,7 +230,8 @@ rule index:
 
 rule tracks:
     input:
-        rules.banlist.output
+        rules.banlist.output,
+        rules.index.output
     output:
         "data/tracks/{sample}.bw"
     conda:
@@ -228,7 +239,7 @@ rule tracks:
     threads:
         8
     shell:
-        "bamCoverage -b {input} -o {output} -p {threads} --binSize 10 --smoothLength 50 --normalizeUsing CPM"
+        "bamCoverage -b {input[0]} -o {output} -p {threads} --binSize 10 --smoothLength 50 --normalizeUsing CPM"
 
 rule fraglength:
     input:
@@ -313,27 +324,40 @@ rule gopeaks:
     output:
         "data/gopeaks/{sample}.bed"
     params:
-        igg = gopeaks_igg
+        igg = gopeaks_igg,
+        mindwidth = get_minwidth
     log:
         "data/logs/gopeaks_{sample}.log"
     shell:
-        "{input.gopeaks} -bam {input.sample} {params.igg} -mdist 1000 -of {output} > {log} 2>&1"
+        "{input.gopeaks} -bam {input.sample} {params.igg} -mdist 1000 {params.mindwidth} -of {output} > {log} 2>&1"
 # input.igg requires the IgG bam file, even if treatment is IgG. however, params.igg will mask input.igg if treatment is IgG.
 # so treatment file != control file for all samples.
 
 rule consensus:
     input:
-       macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
-       gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
-       seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
-       seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
+        group_reps
     output:
-        directory("data/consensus"),
-        "data/consensus/all_groups.txt"
+        "data/consensus/{method}_{condition}_{mark}.bed"
     conda:
         "envs/bedtools.yml"
     shell:
-        "bash src/custom/consensus_peaks.sh"
+        "cat {input} | sort -k1,1 -k2,2n | "
+        "bedtools merge | bedtools intersect -a - -b {input} -c | "
+        "awk -v OFS='\t' '$4 >= 2 {{print}}' | cut -f1-3 > {output} "
+
+# rule consensus:
+#     input:
+#        macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
+#        gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
+#        seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
+#        seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
+#     output:
+#         directory("data/consensus"),
+#         "data/consensus/all_groups.txt"
+#     conda:
+#         "envs/bedtools.yml"
+#     shell:
+#         "bash src/custom/consensus_peaks.sh"
 
 rule multiqc:
     input:
@@ -381,6 +405,7 @@ rule peak_counts:
         cut -f 1-3 {input.seacr_relaxed} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_relaxed}
         cut -f 1-3 {input.seacr_stringent} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_stringent}
         """
+# may want to switch to counting read pairs
 
 rule peak_plot:
     input:
@@ -402,7 +427,7 @@ rule peak_characteristics:
     input:
         "data/consensus"
     output:
-        directory("data/figures/peak_distances"),
+        directory("data/figures/peak-distances"),
         directory("data/figures/peak-counts"),
         directory("data/figures/FRiP")
     conda:
@@ -413,28 +438,26 @@ rule peak_characteristics:
 # deeptools heatmap for all samples at consensus intervals.
 rule heatmap:
     input:
+        expand("data/tracks/{sample}.bw", sample = sample_noigg),
         "data/consensus/all_groups.txt",
-        "data/intervene"
     output:
         directory("data/computeMatrix"),
         directory("data/plotHeatmap")
     conda:
         "envs/dtools.yml"
-    threads: 16
     shell:
-        "bash src/custom/heatmap.sh -i {input[0]}"
+        "bash src/custom/heatmap.sh"
 
 rule scaledHeatmap:
     input:
-        "data/consensus/all_groups.txt",
-        "data/intervene",
-        "data/computeMatrix"
+        expand("data/tracks/{sample}.bw", sample = sample_noigg),
+        "data/consensus/all_groups.txt"
     output:
         directory("data/scaledHeatmap")
     conda:
         "envs/dtools.yml"
     shell:
-        "bash src/custom/scaledHeatmap.sh -i {input[0]}"
+        "bash src/custom/scaledHeatmap.sh"
 
 # venn diagram of consensus peaks
 rule intervene:

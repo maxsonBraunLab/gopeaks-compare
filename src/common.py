@@ -151,3 +151,46 @@ def get_standard(wildcards):
     with open("src/config.yml", "r") as fi:
         cfg = yaml.safe_load(fi)
     return( cfg["STANDARDS"][wildcards.sample] )
+
+def get_minwidth(wildcards):
+    """
+    Input: wildcard of a sample
+    Output: change minwidth for H3K27Ac in Kasumi cells
+    Note: only appropriate for this analysis
+    """
+    condition = str(wildcards.sample).split("_")[0]
+    replicate = str(wildcards.sample).split("_")[1]
+    mark = str(wildcards.sample).split("_")[2]
+    if ((condition == "Kasumi") and (mark == "H3K27Ac")):
+        return ""
+    else:
+        return ""
+
+def get_groups():
+    """
+    Get {condition}_{mark} information without replicates using the samplesheet.
+    """
+    outdf = pd.DataFrame()
+    cond_mark = st[['condition', 'mark']][st.mark != "IgG"].drop_duplicates().reset_index(drop = True) # condition_mark w/out replicates
+    for method in all_methods:
+        tmpdf = cond_mark.copy()
+        tmpdf['method'] = method
+        outdf = pd.concat([outdf, tmpdf])
+    outdf = outdf.reset_index(drop = True)
+    return(outdf)
+
+def group_reps(wildcards):
+    """
+    Input: {condition}_{mark} groups
+    Output: peak files with {method}_{condition}_{replicate}_{mark}
+    """
+    samples = list( st[(st.condition == wildcards.condition) & (st.mark == wildcards.mark)]['sample'] )
+    if wildcards.method == "gopeaks":
+        return([ "data/gopeaks/{s}.bed".format(s = i) for i in samples ])
+    if wildcards.method == "macs2":
+        return([ "data/macs2/{s}_peaks.narrowPeak".format(s = i) for i in samples ])
+    if wildcards.method == "seacr-relaxed":
+        return([ "data/seacr/{s}.relaxed.bed".format(s = i) for i in samples ])
+    if wildcards.method == "seacr-stringent":
+        return([ "data/seacr/{s}.stringent.bed".format(s = i) for i in samples ])
+

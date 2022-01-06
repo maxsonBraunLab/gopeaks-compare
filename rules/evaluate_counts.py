@@ -8,9 +8,12 @@ rule evaluate_gopeaks_counts:
 	params:
 		standard=get_standard
 	conda:
-		"../envs/bedtools.yml"
+		"../envs/eval.yml"
+	threads: 4
+	resources:
+		mem_mb = 2000
 	shell:
-		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} > {output}"
+		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} -t {threads} > {output}"
 
 rule evaluate_macs2_counts:
 	input:
@@ -20,9 +23,12 @@ rule evaluate_macs2_counts:
 	params:
 		standard=get_standard
 	conda:
-		"../envs/bedtools.yml"
+		"../envs/eval.yml"
+	threads: 4
+	resources:
+		mem_mb = 2000
 	shell:
-		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} > {output}"
+		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} -t {threads} > {output}"
 
 rule evaluate_seacr_relaxed_counts:
 	input:
@@ -32,9 +38,12 @@ rule evaluate_seacr_relaxed_counts:
 	params:
 		standard=get_standard
 	conda:
-		"../envs/bedtools.yml"
+		"../envs/eval.yml"
+	threads: 4
+	resources:
+		mem_mb = 2000
 	shell:
-		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} > {output}"
+		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} -t {threads} > {output}"
 
 rule evaluate_seacr_stringent_counts:
 	input:
@@ -44,9 +53,12 @@ rule evaluate_seacr_stringent_counts:
 	params:
 		standard=get_standard
 	conda:
-		"../envs/bedtools.yml"
+		"../envs/eval.yml"
+	threads: 4
+	resources:
+		mem_mb = 2000
 	shell:
-		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} > {output}"
+		"bash src/custom/evals/evaluate_counts.sh -i {input} -s {params.standard} -t {threads} > {output}"
 
 rule plot_roc_counts:
 	input:

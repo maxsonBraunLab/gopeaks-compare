@@ -196,7 +196,7 @@ for (i in 1:nrow(peak_groups)) {
   temp_plot <- ggplot(temp_df, aes_string(x = "width", y = "counts", col = "method")) +
     geom_point() +
     geom_density_2d(color = "white") +
-    geom_text(aes(x = 300, y = 10000, label = comma(peaks), size = 8), hjust = 0, col = "black") +
+    geom_text(aes(x = 300, y = 10000, label = comma(peaks), size = 8), hjust = 0, col = "black", check_overlap = TRUE) +
     facet_grid(sample ~ method) +
     scale_x_log10(labels = comma) +
     scale_y_log10(labels = comma) +

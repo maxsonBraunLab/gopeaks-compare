@@ -7,11 +7,11 @@ library(tidyr)
 
 conflict_prefer("filter", "dplyr")
 
-dir.create("data/figures/roc_counts", recursive = TRUE)
-dir.create("data/figures/pr_counts", recursive = TRUE)
+dir.create(paste0(snakemake@params["roc_dir"], "/", "roc_counts"), recursive = TRUE)
+dir.create(paste0(snakemake@params["pr_dir"], "/", "pr_counts"), recursive = TRUE)
 
 # import confusion matrices -----------------------------------------------------------------------
-model_list <- lapply(list.files("data/evaluate_counts/", full.names = TRUE), read.table, sep = "\t", header = TRUE)
+model_list <- lapply(list.files("data/evaluate_consensus_counts/", full.names = TRUE), read.table, sep = "\t", header = TRUE)
 model_df <- bind_rows(model_list) %>% mutate(sample = paste(condition, replicate, mark, sep = "_"))
 
 model_df$replicate <- as.factor(model_df$replicate)
@@ -32,8 +32,8 @@ for (i in 1:nrow(group_keys)) {
   tmp_mark <- as.character(group_keys[i,2])
   
   # file I/O
-  out_roc = paste0("data/figures/roc_counts/", tmp_condition, "_", tmp_mark, ".roc.pdf") # \m/
-  out_pr = paste0("data/figures/pr_counts/", tmp_condition, "_", tmp_mark, ".pr.pdf")
+  out_roc = paste0(snakemake@params["roc_dir"], "/", "roc_counts/", tmp_condition, "_", tmp_mark, ".roc.pdf") # \m/
+  out_pr = paste0(snakemake@params["pr_dir"], "/", "pr_counts/", tmp_condition, "_", tmp_mark, ".pr.pdf")
   
   # filter the main DF with above groupings
   tmp_df <- model_df %>%
@@ -154,5 +154,5 @@ auc_graph <- auc_table %>%
     theme_minimal() +
     theme(plot.background = element_rect(fill = "white"))
 
-out_auc = "data/figures/roc_counts/auc.pdf"
+out_auc = paste0(snakemake@params['roc_dir'], "/", "roc_counts/auc.pdf")
 ggsave(out_auc, auc_graph, width = 16, height = 9, dpi = 600)

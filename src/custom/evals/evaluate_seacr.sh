@@ -1,22 +1,41 @@
 #!/bin/bash
 
-while getopts "i:s:" op
+while getopts "i:s:t:" op
 do
 	case "$op" in
 		i)  sample="$OPTARG";;
 		s)  standard="$OPTARG";;
+		t)  threads="$OPTARG";;
 		\?) exit 1;;
 	esac
 done
 
 # variables and functions ---------------------------------------------------------------
 
-calculate_positive_rates () {
+calculate_rate() {
 	awk -v true_term=$1 -v false_term=$2 'BEGIN {print true_term / (true_term + false_term)}' | cut -b1-5
 }
 
-calculate_f1_score () {
+calculate_f1_score() {
 	awk -v true_term=$1 -v false_term=$2 'BEGIN {print 2 * (true_term * false_term) / (true_term + false_term)}' | cut -b1-5
+}
+
+threshold() {
+	counts=$1
+	predicted_truth=$(sort -n -k4 $sample | awk -v s=$1 '$4 >= s')
+	predicted_false=$(sort -n -k4 $sample | awk -v s=$1 '$4 < s')
+	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
+	FP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
+	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
+	TN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
+
+	# calculate precision, recall, F1. export results.
+	precision=$(calculate_rate $TP $FP)
+	recall=$(calculate_rate $TP $FN)
+	fpr=$(calculate_rate $FP $TN)
+	f1=$(calculate_f1_score $precision $recall)
+
+	echo -e "$method\t$condition\t$replicate\t$mark\t$counts\t$TP\t$FP\t$FN\t$TN\t$precision\t$recall\t$fpr\t$f1"
 }
 
 # file I/O ------------------------------------------------------------------------------
@@ -31,26 +50,20 @@ echo -e "method\tcondition\treplicate\tmark\tsignal\tTP\tFP\tFN\tTN\tprecision\t
 
 # file prep -----------------------------------------------------------------------------
 
-# sort input by signal. identify all unique signals within a sample.
-sample_file=$(sort -n -k4 $sample)
-sample_signals=$(echo "$sample_file" | cut -f4 | uniq)
+# identify all signals within a sample.
+sample_signals=$(cut -f4 $sample | sort -n | uniq)
 
-for signal in $sample_signals; do
+# export vars and fx to child processes
+export -f calculate_rate
+export -f threshold
+export -f calculate_f1_score
+if [ $method != "" ]; then export method; else echo "method $method is undefined" && exit 1; fi
+if [ $condition != "" ]; then export condition; else echo "condition $condition is undefined" && exit 1; fi
+if [ $replicate != "" ]; then export replicate; else echo "replicate $replicate is undefined" && exit 1; fi
+if [ $mark != "" ]; then export mark; else echo "mark $mark is undefined" && exit 1; fi
+if [ $sample != "" ]; then export sample; else echo "sample $sample is undefined" && exit 1; fi
+if [ $standard != "" ]; then export standard; else echo "standard $standard is undefined" && exit 1; fi
 
-	predicted_truth=$(echo "$sample_file" | awk -v s=$signal '$4 >= s')
-	predicted_false=$(echo "$sample_file" | awk -v s=$signal '$4 < s')
-	TP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
-	FP=$(echo "$predicted_truth" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
-	FN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -u -a - -b $standard | wc -l)
-	TN=$(echo "$predicted_false" | cut -f1-3 | bedtools intersect -v -a - -b $standard | wc -l)
-	f1=$(calculate_f1_score $precision $recall)
 
-	# calculate precision, recall, F1. export results.
-	precision=$(calculate_positive_rates $TP $FP)
-	recall=$(calculate_positive_rates $TP $FN)
-	fpr=$(calculate_positive_rates $FP $TN)
 
-	echo -e "$method\t$condition\t$replicate\t$mark\t$signal\t$TP\t$FP\t$FN\t$TN\t$precision\t$recall\t$fpr\t$f1"
-
-done
-
+parallel --keep-order --trim lr -j $threads threshold ::: $sample_signals # process peaks in parallel!
