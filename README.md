@@ -2,7 +2,7 @@
 
 [CUT&TAG](https://www.nature.com/articles/s41467-019-09982-5) and [CUT&RUN](https://elifesciences.org/articles/21856) are new molecular biology techniques that can find the locality of histone marks and transcription factor in DNA. Unlike the well-established ChIP-Seq protocol, CUT&TAG generates data with very little background signal, enriched peaks, and requires **10-fold** less sequencing reads per sample. Due to the increased sparsity of signal in CUT&TAG, contemporary peak calling software like MACS2 and SEACR can have trouble identifying regions of histone / transcription factor enrichment in the genome; this problem is compounded by using lower-than-ideal quality sequencing libraries.
 
-## Workflow 
+## Workflow
 
 This repository compares the performance of gopeaks with MACS2 and SEACR in CUT&TAG / CUT&RUN data. The code for this analysis was adapted from the original [CUT&TAG pipeline](https://github.com/maxsonBraunLab/cutTag-pipeline), with additional steps for MACS2 and SEACR peak calling. The additional steps will also include taking high-confidence peaks across biological replicates, plot the quality of peaks for each method, and evaluate the completeness of a method's peak call against a gold standard using ROC curves. A complete write-up of the methods can be found in the official paper **here**.
 
@@ -12,7 +12,11 @@ Once all the public data has been downloaded with `src/custom/data_download.sh` 
 
 ## References
 
-Thank you to those who have contributed their time and effort to push the boundaries of progress. 
+Thank you to those who have contributed their time and effort to push the boundaries of progress.
+
+## Method
+
+![](rulegraph.svg)
 
 **CUT&TAG**
 
