@@ -1,0 +1,6 @@
+channels:
+    - bioconda
+    - conda-forge
+    - defaults
+dependencies:
+    - intervene=0.6.5
