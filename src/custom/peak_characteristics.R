@@ -9,25 +9,25 @@ conflict_prefer("filter", "dplyr")
 conflict_prefer("rename", "dplyr")
 conflict_prefer("select", "dplyr")
 
-if (!dir.exists("data/figures/peak-counts")) {
-    dir.create("data/figures/peak-counts")
+if (!dir.exists("data/figures-evaluate-consensus-counts/peak-counts")) {
+    dir.create("data/figures-evaluate-consensus-counts/peak-counts")
 } else {
-    unlink("data/figures/peak-counts", recursive = TRUE)
-    dir.create("data/figures/peak-counts")
+    unlink("data/figures-evaluate-consensus-counts/peak-counts", recursive = TRUE)
+    dir.create("data/figures-evaluate-consensus-counts/peak-counts")
 }
 
-if (!dir.exists("data/figures/FRiP")) {
-    dir.create("data/figures/FRiP")
+if (!dir.exists("data/figures-evaluate-consensus-counts/FRiP")) {
+    dir.create("data/figures-evaluate-consensus-counts/FRiP")
 } else {
-    unlink("data/figures/FRiP", recursive = TRUE)
-    dir.create("data/figures/FRiP")
+    unlink("data/figures-evaluate-consensus-counts/FRiP", recursive = TRUE)
+    dir.create("data/figures-evaluate-consensus-counts/FRiP")
 }
 
-if (!dir.exists("data/figures/peak-distances")) {
-    dir.create("data/figures/peak-distances")
+if (!dir.exists("data/figures-evaluate-consensus-counts/peak-distances")) {
+    dir.create("data/figures-evaluate-consensus-counts/peak-distances")
 } else {
-    unlink("data/figures/peak-distances", recursive = TRUE)
-    dir.create("data/figures/peak-distances")
+    unlink("data/figures-evaluate-consensus-counts/peak-distances", recursive = TRUE)
+    dir.create("data/figures-evaluate-consensus-counts/peak-distances")
 }
 
 method_finder = function(filename) {
@@ -42,64 +42,64 @@ method_finder = function(filename) {
   }
 }
 
-# count peaks -------------------------------------------------------------------------------------
+# # count peaks -------------------------------------------------------------------------------------
 
-print("Counting peaks at the replicate level")
+# print("Counting peaks at the replicate level")
 
-gopeaks <- list.files("data/gopeaks", pattern = "*.bed", full.names = TRUE, recursive = TRUE)
-macs2 <- list.files("data/macs2", pattern = "Peak", full.names = TRUE, recursive = TRUE)
-seacr_relaxed <- list.files("data/seacr", pattern = "*relaxed*.bed", full.names = TRUE, recursive = TRUE)
-seacr_stringent <- list.files("data/seacr", pattern = "*stringent*.bed", full.names = TRUE, recursive = TRUE)
+# gopeaks <- list.files("data/gopeaks", pattern = "*.bed", full.names = TRUE, recursive = TRUE)
+# macs2 <- list.files("data/macs2", pattern = "Peak", full.names = TRUE, recursive = TRUE)
+# seacr_relaxed <- list.files("data/seacr", pattern = "*relaxed*.bed", full.names = TRUE, recursive = TRUE)
+# seacr_stringent <- list.files("data/seacr", pattern = "*stringent*.bed", full.names = TRUE, recursive = TRUE)
 
-peaks_df = bind_rows(lapply(c(gopeaks, macs2, seacr_relaxed, seacr_stringent), function(x) {
-  # file i/o
-  sample = strsplit(basename(x), "\\.")[[1]][1]
-  condition = strsplit(sample, "_")[[1]][1]
-  replicate = strsplit(sample, "_")[[1]][2]
-  mark = strsplit(sample, "_")[[1]][3]
-  peaks = nrow(read.table(x)) # assume each line is a peak.
-  method = method_finder(x)
+# peaks_df = bind_rows(lapply(c(gopeaks, macs2, seacr_relaxed, seacr_stringent), function(x) {
+#   # file i/o
+#   sample = strsplit(basename(x), "\\.")[[1]][1]
+#   condition = strsplit(sample, "_")[[1]][1]
+#   replicate = strsplit(sample, "_")[[1]][2]
+#   mark = strsplit(sample, "_")[[1]][3]
+#   peaks = nrow(read.table(x)) # assume each line is a peak.
+#   method = method_finder(x)
 
-  data.frame(method = method,
-             sample = sample,
-             condition = condition,
-             replicate = replicate,
-             mark = mark,
-             counts = peaks)
-})) %>% mutate(sample = str_replace(sample, "_peaks", "")) # fix macs2 _peaks suffix
+#   data.frame(method = method,
+#              sample = sample,
+#              condition = condition,
+#              replicate = replicate,
+#              mark = mark,
+#              counts = peaks)
+# })) %>% mutate(sample = str_replace(sample, "_peaks", "")) # fix macs2 _peaks suffix
 
-# define condition,mark groupings
-peak_groups <- peaks_df %>% group_by(condition, mark) %>% group_keys()
+# # define condition,mark groupings
+# peak_groups <- peaks_df %>% group_by(condition, mark) %>% group_keys()
 
-# plot peak counts for all condition,mark.
-for (i in 1:nrow(peak_groups)) {
+# # plot peak counts for all condition,mark.
+# for (i in 1:nrow(peak_groups)) {
 
-  # define condition,mark
-  temp_condition = as.character(peak_groups[i, "condition"])
-  temp_mark = as.character(peak_groups[i, "mark"])
+#   # define condition,mark
+#   temp_condition = as.character(peak_groups[i, "condition"])
+#   temp_mark = as.character(peak_groups[i, "mark"])
 
-  # subset DF by condition,mark
-  peaks_by_condition_method <- peaks_df %>%
-    filter(condition == temp_condition) %>%
-    filter(mark == temp_mark)
+#   # subset DF by condition,mark
+#   peaks_by_condition_method <- peaks_df %>%
+#     filter(condition == temp_condition) %>%
+#     filter(mark == temp_mark)
 
-  # file I/O
-  outfile = paste0("data/figures/peak-counts/", temp_condition, "_", temp_mark, ".pdf")
+#   # file I/O
+#   outfile = paste0("data/figures-evaluate-consensus-counts/peak-counts/", temp_condition, "_", temp_mark, ".pdf")
 
-  # plot peak counts
-  p <- peaks_by_condition_method %>%
-    ggplot(aes_string(x = "replicate", y = "counts", fill = "method")) +
-      geom_col(position = "dodge") +
-      geom_text(aes_string(label = "counts"), vjust = 2, color = "white", check_overlap = TRUE) +
-      xlab("Replicates") +
-      ylab("Number of Peaks") +
-      scale_y_continuous(labels = scales::comma) +
-      scale_fill_brewer(palette = "RdYlBu", direction = -1) +
-      ggtitle("Peak Counts") +
-      theme_minimal() +
-      theme(plot.background = element_rect(fill = "white"))
-  ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
-}
+#   # plot peak counts
+#   p <- peaks_by_condition_method %>%
+#     ggplot(aes_string(x = "replicate", y = "counts", fill = "method")) +
+#       geom_col(position = "dodge") +
+#       geom_text(aes_string(label = "counts"), vjust = 2, color = "white", check_overlap = TRUE) +
+#       xlab("Replicates") +
+#       ylab("Number of Peaks") +
+#       scale_y_continuous(labels = scales::comma) +
+#       scale_fill_brewer(palette = "RdYlBu", direction = -1) +
+#       ggtitle("Peak Counts") +
+#       theme_minimal() +
+#       theme(plot.background = element_rect(fill = "white"))
+#   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
+# }
 
 # count consensus peaks ---------------------------------------------------------------------------
 
@@ -134,7 +134,7 @@ for (i in 1:nrow(peak_groups)) {
     filter(mark == temp_mark)
   
   # file I/O
-  outfile = paste0("data/figures/peak-counts/", temp_condition, "_", temp_mark, "-consensus", ".pdf")
+  outfile = paste0("data/figures-evaluate-consensus-counts/peak-counts/", temp_condition, "_", temp_mark, "-consensus", ".pdf")
   
   # plot peak counts
   p <- peaks_by_condition_method %>%
@@ -151,57 +151,57 @@ for (i in 1:nrow(peak_groups)) {
   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
 }
 
-# FRiP --------------------------------------------------------------------------------------------
+# # FRiP --------------------------------------------------------------------------------------------
 
-print("Plotting FRiP at the replicate level")
+# print("Plotting FRiP at the replicate level")
 
-frip_df = bind_rows(lapply(list.files("data/plotEnrichment", pattern="*.tsv", full.names=TRUE), function(x) {
-  # file i/o
-  sample = strsplit(basename(x), "\\.")[[1]][1]
-  method = strsplit(sample, "_")[[1]][1]
-  condition = strsplit(sample, "_")[[1]][2]
-  replicate = strsplit(sample, "_")[[1]][3]
-  mark = strsplit(sample, "_")[[1]][4]
-  frip = read.table(x, header = TRUE)[1, "percent"]
+# frip_df = bind_rows(lapply(list.files("data/plotEnrichment", pattern="*.tsv", full.names=TRUE), function(x) {
+#   # file i/o
+#   sample = strsplit(basename(x), "\\.")[[1]][1]
+#   method = strsplit(sample, "_")[[1]][1]
+#   condition = strsplit(sample, "_")[[1]][2]
+#   replicate = strsplit(sample, "_")[[1]][3]
+#   mark = strsplit(sample, "_")[[1]][4]
+#   frip = read.table(x, header = TRUE)[1, "percent"]
 
-  data.frame(method = method,
-             sample = sample,
-             condition = condition,
-             replicate = replicate,
-             mark = mark,
-             frip = frip)
-}))
+#   data.frame(method = method,
+#              sample = sample,
+#              condition = condition,
+#              replicate = replicate,
+#              mark = mark,
+#              frip = frip)
+# }))
 
-# define condition,mark groupings
-peak_groups <- frip_df %>% group_by(condition, mark) %>% group_keys()
+# # define condition,mark groupings
+# peak_groups <- frip_df %>% group_by(condition, mark) %>% group_keys()
 
-# plot peak-peak distances for all condition,mark.
-for (i in 1:nrow(peak_groups)) {
+# # plot peak-peak distances for all condition,mark.
+# for (i in 1:nrow(peak_groups)) {
 
-  # define condition,mark
-  temp_condition = as.character(peak_groups[i, "condition"])
-  temp_mark = as.character(peak_groups[i, "mark"])
+#   # define condition,mark
+#   temp_condition = as.character(peak_groups[i, "condition"])
+#   temp_mark = as.character(peak_groups[i, "mark"])
 
-  # subset DF by condition,mark
-  peaks_by_condition_method <- frip_df %>%
-    filter(condition == temp_condition) %>%
-    filter(mark == temp_mark)
+#   # subset DF by condition,mark
+#   peaks_by_condition_method <- frip_df %>%
+#     filter(condition == temp_condition) %>%
+#     filter(mark == temp_mark)
 
-  # file I/O
-  outfile = paste0("data/figures/FRiP/", temp_condition, "_", temp_mark, ".pdf")
+#   # file I/O
+#   outfile = paste0("data/figures-evaluate-consensus-counts/FRiP/", temp_condition, "_", temp_mark, ".pdf")
 
-  # plot peak counts
-  p <- peaks_by_condition_method %>%
-    ggplot(aes(x = replicate, y = frip, fill = method)) +
-      geom_col(position = "dodge") +
-      ylab("Fraction of Reads in Peaks") +
-      xlab("Replicate") +
-      theme(plot.background = element_rect(fill = "white")) +
-      scale_fill_brewer(palette = "RdYlBu", direction = -1) +
-      theme_minimal() +
-      theme(plot.background = element_rect(fill = "white"))
-  ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
-}
+#   # plot peak counts
+#   p <- peaks_by_condition_method %>%
+#     ggplot(aes(x = replicate, y = frip, fill = method)) +
+#       geom_col(position = "dodge") +
+#       ylab("Fraction of Reads in Peaks") +
+#       xlab("Replicate") +
+#       theme(plot.background = element_rect(fill = "white")) +
+#       scale_fill_brewer(palette = "RdYlBu", direction = -1) +
+#       theme_minimal() +
+#       theme(plot.background = element_rect(fill = "white"))
+#   ggsave(outfile, p, width = 8, height = 6, units = "in", dpi = 600)
+# }
 
 # FRiP consensus peaks ----------------------------------------------------------------------------
 
@@ -238,7 +238,7 @@ for (i in 1:nrow(peak_groups)) {
     filter(mark == temp_mark)
   
   # file I/O
-  outfile = paste0("data/figures/FRiP/", temp_condition, "_", temp_mark, "-consensus", ".pdf")
+  outfile = paste0("data/figures-evaluate-consensus-counts/FRiP/", temp_condition, "_", temp_mark, "-consensus", ".pdf")
   
   # plot FRiP
   p <- peaks_by_condition_mark %>%
@@ -307,10 +307,10 @@ for (i in 1:nrow(peak_groups)) {
       theme_minimal() +
       theme(plot.background = element_rect(fill = "white"))
 
-  peak_distance_dist <- paste0("data/figures/peak-distances/", temp_condition, "_", temp_mark, ".pdf")
+  peak_distance_dist <- paste0("data/figures-evaluate-consensus-counts/peak-distances/", temp_condition, "_", temp_mark, ".pdf")
   ggsave(peak_distance_dist, peak_distance_plot, width = 8, height = 6, units = "in", dpi = 600)
 
-  peak_distance_stat <- paste0("data/figures/peak-distances/", temp_condition, "_", temp_mark, ".txt")
+  peak_distance_stat <- paste0("data/figures-evaluate-consensus-counts/peak-distances/", temp_condition, "_", temp_mark, ".txt")
   bind_rows(distance_by_methods) %>%
     group_by(method) %>%
     summarise(avg_dist = mean(distance), stdev_dist = sd(distance), med_dist = median(distance)) %>%

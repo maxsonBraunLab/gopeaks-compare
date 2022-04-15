@@ -1,11 +1,16 @@
 st = pd.read_table('samplesheet.tsv').set_index('sample',drop=False)
 all_methods = ["gopeaks", "macs2", "seacr-relaxed", "seacr-stringent"]
-all_groups = get_groups() # {method}_{condition}_{mark} no igg
+all_groups = get_groups() # df of method, cond, and mark, columns w/out igg.
+all_consensus = expand("data/consensus/{method}_{condition}_{mark}.bed", zip,
+					method = list(all_groups.method),
+					condition = list(all_groups.condition),
+					mark = list(all_groups.mark)),
 
 rule gopeaks_consensus_counts:
 	input:
-		"data/gopeaks/{sample}.bed",
-		"data/ban/{sample}.ban.sorted.markd.bam"
+		"data/gopeaks/{sample}_peaks.bed",
+		"data/seacr/bam/{sample}.name.sorted.bam",
+		all_consensus
 	output:
 		"data/consensus_counts/gopeaks_{sample}.bed"
 	conda:
@@ -15,15 +20,20 @@ rule gopeaks_consensus_counts:
 		cond=$(echo {wildcards.sample} | cut -d_ -f1)
 		mark=$(echo {wildcards.sample} | cut -d_ -f3)
 		consensus=$(find data/consensus -name "gopeaks*${{cond}}*${{mark}}*.bed")
+		# count read pair pileup at consensus peaks, rather than {input[0]} aka sample-specific peak set.
 
-		bedtools intersect -u -a $consensus -b {input[0]} | \
-		bedtools intersect -C -a stdin -b {input[1]} > {output}
+		bedtools bamtobed -bedpe -i {input[1]} | \
+		awk '$1==$4 && $6-$2 < 1000 {{print $0}}' | \
+		cut -f1,2,6 | \
+		sort -k1,1 -k2,2n -k3,3n | \
+		bedtools intersect -C -a $consensus -b stdin > {output}
 		"""
 
 rule macs2_consensus_counts:
 	input:
-		"data/macs2/{sample}_peaks.narrowPeak",
-		"data/ban/{sample}.ban.sorted.markd.bam"
+		"data/macs2/{sample}_peaks.bed",
+		"data/seacr/bam/{sample}.name.sorted.bam",
+		all_consensus
 	output:
 		"data/consensus_counts/macs2_{sample}.bed"
 	conda:
@@ -33,15 +43,20 @@ rule macs2_consensus_counts:
 		cond=$(echo {wildcards.sample} | cut -d_ -f1)
 		mark=$(echo {wildcards.sample} | cut -d_ -f3)
 		consensus=$(find data/consensus -name "macs2*${{cond}}*${{mark}}*.bed")
+		# count read pair pileup at consensus peaks, rather than {input[0]} aka sample-specific peak set.
 
-		bedtools intersect -u -a $consensus -b {input[0]} | \
-		bedtools intersect -C -a stdin -b {input[1]} > {output}
+		bedtools bamtobed -bedpe -i {input[1]} | \
+		awk '$1==$4 && $6-$2 < 1000 {{print $0}}' | \
+		cut -f1,2,6 | \
+		sort -k1,1 -k2,2n -k3,3n | \
+		bedtools intersect -C -a $consensus -b stdin > {output}
 		"""
 
 rule seacr_relaxed_consensus_counts:
 	input:
 		"data/seacr/{sample}.relaxed.bed",
-		"data/ban/{sample}.ban.sorted.markd.bam"
+		"data/seacr/bam/{sample}.name.sorted.bam",
+		all_consensus
 	output:
 		"data/consensus_counts/seacr-relaxed_{sample}.bed"
 	conda:
@@ -51,15 +66,20 @@ rule seacr_relaxed_consensus_counts:
 		cond=$(echo {wildcards.sample} | cut -d_ -f1)
 		mark=$(echo {wildcards.sample} | cut -d_ -f3)
 		consensus=$(find data/consensus -name "seacr-relaxed*${{cond}}*${{mark}}*.bed")
+		# count read pair pileup at consensus peaks, rather than {input[0]} aka sample-specific peak set.
 
-		bedtools intersect -u -a $consensus -b {input[0]} | \
-		bedtools intersect -C -a stdin -b {input[1]} > {output}
+		bedtools bamtobed -bedpe -i {input[1]} | \
+		awk '$1==$4 && $6-$2 < 1000 {{print $0}}' | \
+		cut -f1,2,6 | \
+		sort -k1,1 -k2,2n -k3,3n | \
+		bedtools intersect -C -a $consensus -b stdin > {output}
 		"""
 
 rule seacr_stringent_consensus_counts:
 	input:
 		"data/seacr/{sample}.stringent.bed",
-		"data/ban/{sample}.ban.sorted.markd.bam"
+		"data/seacr/bam/{sample}.name.sorted.bam",
+		all_consensus
 	output:
 		"data/consensus_counts/seacr-stringent_{sample}.bed"
 	conda:
@@ -69,9 +89,13 @@ rule seacr_stringent_consensus_counts:
 		cond=$(echo {wildcards.sample} | cut -d_ -f1)
 		mark=$(echo {wildcards.sample} | cut -d_ -f3)
 		consensus=$(find data/consensus -name "seacr-stringent*${{cond}}*${{mark}}*.bed")
+		# count read pair pileup at consensus peaks, rather than {input[0]} aka sample-specific peak set.
 
-		bedtools intersect -u -a $consensus -b {input[0]} | \
-		bedtools intersect -C -a stdin -b {input[1]} > {output}
+		bedtools bamtobed -bedpe -i {input[1]} | \
+		awk '$1==$4 && $6-$2 < 1000 {{print $0}}' | \
+		cut -f1,2,6 | \
+		sort -k1,1 -k2,2n -k3,3n | \
+		bedtools intersect -C -a $consensus -b stdin > {output}
 		"""
 
 rule evaluate_consensus_counts:
@@ -97,9 +121,6 @@ rule plot_consensus_counts:
 	output:
 		directory("data/figures-evaluate-consensus-counts/roc_counts"),
 		directory("data/figures-evaluate-consensus-counts/pr_counts")
-	params:
-		roc_dir  = "data/figures-evaluate-consensus-counts",
-		pr_dir = "data/figures-evaluate-consensus-counts"
 	conda:
 		"../envs/plot.yml"
 	script:

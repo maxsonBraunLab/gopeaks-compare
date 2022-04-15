@@ -7,6 +7,7 @@ CSIZES:
 GSIZE: "2.7e9"
 GENOME:
     - "/home/groups/MaxsonLab/indices/GRch38/bowtie2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.bowtie_index"
+FASTA: "/home/groups/MaxsonLab/indices/GRch38/bowtie2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta"
 GENES: 
     - "genes/hg38_refseq_genes.bed"
 BOWTIE2:
@@ -45,14 +46,19 @@ GTF: "src/Homo_sapiens.GRCh38.101.gtf.gz"
 
 # gold standard comparison for evaluating algorithms
 STANDARDS:
+    K562_1_CTCF: "src/standards/ENCFF660GHM.1000.bed"
+    K562_2_CTCF: "src/standards/ENCFF660GHM.1000.bed"
+    K562_3_CTCF: "src/standards/ENCFF660GHM.1000.bed"
     K562_1_H3K4me3: "src/standards/ENCFF246IEW.1000.filtered.bed" # replicated peaks. GRCh38. K562 H3K4me3.
     K562_2_H3K4me3: "src/standards/ENCFF246IEW.1000.filtered.bed"
     K562_1_H3K27Ac: "src/standards/ENCFF439SDV.1000.filtered.bed"
     K562_2_H3K27Ac: "src/standards/ENCFF439SDV.1000.filtered.bed"
     K562_1_H3K4me1: "src/standards/ENCFF590NGQ.1000.filtered.bed"
     K562_2_H3K4me1: "src/standards/ENCFF590NGQ.1000.filtered.bed"
+    K562_1_H3K27me3: "src/standards/ENCFF795ZOS.3000.filtered.bed"
     Kasumi_2_H3K27Ac: "src/standards/Kasumi_H3K27Ac.bed"
     Kasumi_3_H3K27Ac: "src/standards/Kasumi_H3K27Ac.bed"
     # Reproduce Figure 3A from SEACR paper
     K562_1_H3K4me2: "src/standards/ENCFF256AQN.1000.filtered.bed"
     K562_2_H3K4me2: "src/standards/ENCFF256AQN.1000.filtered.bed"
+

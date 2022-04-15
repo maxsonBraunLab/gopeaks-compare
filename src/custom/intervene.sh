@@ -8,25 +8,17 @@ else
 	mkdir "data/intervene"
 fi
 
-while getopts "i:" op
-do
-	case "$op" in
-		i)  i="$OPTARG";;
-		\?) exit 1;;
-	esac
-done
-
 # check if input files exists.
-if [ -f $i ];
+if [ -f samplesheet.tsv ];
 then
-	echo "$i file exists"
+	echo "samplesheet.tsv file exists"
 else
-	echo -e "$i does not exist. Exiting program."
+	echo -e "samplesheet.tsv does not exist. Exiting program."
 	exit
 fi
 
 # intervene to find 4-way venn diagrams of peak sets
-while IFS=$'\t' read condition mark
+awk -v OFS='\t' '{print $5,$4}' samplesheet.tsv | tail -n+2 | grep -vE "IgG|Pt176" | sort | uniq | while read condition mark
 do
 
 	# define I/O
@@ -37,8 +29,6 @@ do
 	condition_mark=$(echo ${condition}_${mark})
 	output_venn="data/intervene/$condition_mark"
 	log_file="data/logs/intervene_${condition}_${mark}.log"
-
-	echo "intervene | condition,mark: $condition,$mark"
 
 	# define parameters
 	title=$(echo "$condition_mark Consensus Peaks")
@@ -51,10 +41,10 @@ do
 	--colors='#2C7BB6','#ABD9E9','#FDAE61','#D7191C' \
 	--fontsize 12 \
 	-o $output_venn"
+	echo $cmd
 	echo "$cmd" > $log_file 2>&1
-	eval "$cmd" &
+	eval "$cmd"
 
-done < $i
+done
 
-echo "Taking intersection of consensus peaks..."
-wait
+echo "intersection of consensus peaks across peak callers is finished."

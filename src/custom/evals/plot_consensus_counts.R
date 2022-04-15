@@ -7,8 +7,8 @@ library(tidyr)
 
 conflict_prefer("filter", "dplyr")
 
-dir.create(paste0(snakemake@params["roc_dir"], "/", "roc_counts"), recursive = TRUE)
-dir.create(paste0(snakemake@params["pr_dir"], "/", "pr_counts"), recursive = TRUE)
+dir.create("data/figures-evaluate-consensus-counts/roc_counts", recursive = TRUE)
+dir.create("data/figures-evaluate-consensus-counts/pr_counts", recursive = TRUE)
 
 # import confusion matrices -----------------------------------------------------------------------
 model_list <- lapply(list.files("data/evaluate_consensus_counts/", full.names = TRUE), read.table, sep = "\t", header = TRUE)
@@ -32,8 +32,8 @@ for (i in 1:nrow(group_keys)) {
   tmp_mark <- as.character(group_keys[i,2])
   
   # file I/O
-  out_roc = paste0(snakemake@params["roc_dir"], "/", "roc_counts/", tmp_condition, "_", tmp_mark, ".roc.pdf") # \m/
-  out_pr = paste0(snakemake@params["pr_dir"], "/", "pr_counts/", tmp_condition, "_", tmp_mark, ".pr.pdf")
+  out_roc = paste0("data/figures-evaluate-consensus-counts/roc_counts", "/", tmp_condition, "_", tmp_mark, ".roc.pdf") # \m/
+  out_pr = paste0("data/figures-evaluate-consensus-counts/pr_counts", "/", tmp_condition, "_", tmp_mark, ".pr.pdf")
   
   # filter the main DF with above groupings
   tmp_df <- model_df %>%
@@ -115,6 +115,7 @@ AUC <- function(roc_coordinates) {
   }
   
   if (auc > 1) {
+    print(paste("AUC:", auc))
     stop("ERROR: AUC is greater than 1. Please review your data!")
   }
   
@@ -135,6 +136,7 @@ list_of_auc <- lapply(split(model_df, model_df$info), function(x) {
     select(fpr, recall) %>%
     arrange(fpr) %>%
     filter(fpr <= 1) %>%
+    filter(recall <= 1) %>%
     AUC()
 
 })
@@ -144,7 +146,7 @@ auc_table <- gather(as.data.frame.list(list_of_auc)) %>%
   separate(key, into = c("method", "condition", "replicate", "mark"), sep = "_") %>%
   rename("AUC" = value)
 
-auc_graph <- auc_table %>% 
+au_roc <- auc_table %>% 
   ggplot(aes(x = replicate, y = AUC, fill = method)) +
     geom_col(position = "dodge") +
     facet_wrap(condition + mark ~ .) +
@@ -154,5 +156,35 @@ auc_graph <- auc_table %>%
     theme_minimal() +
     theme(plot.background = element_rect(fill = "white"))
 
-out_auc = paste0(snakemake@params['roc_dir'], "/", "roc_counts/auc.pdf")
-ggsave(out_auc, auc_graph, width = 16, height = 9, dpi = 600)
+ggsave("data/figures-evaluate-consensus-counts/roc_counts/auc.pdf", au_roc, width = 24, height = 13.5, dpi = 600)
+
+# AUC for PRs -------------------------------------------------------------------------------------
+
+save.image()
+list_of_auc <- lapply(split(model_df, model_df$info), function(x) {
+
+  x %>% 
+    select(recall, precision) %>%
+    arrange(recall) %>%
+    filter(precision <= 1) %>%
+    filter(recall <= 1) %>%
+    AUC()
+
+})
+
+auc_table <- gather(as.data.frame.list(list_of_auc)) %>%
+  mutate(key = str_replace(key, "\\.", "-")) %>%
+  separate(key, into = c("method", "condition", "replicate", "mark"), sep = "_") %>%
+  rename("AUC" = value)
+
+au_pr <- auc_table %>% 
+  ggplot(aes(x = replicate, y = AUC, fill = method)) +
+    geom_col(position = "dodge") +
+    facet_wrap(condition + mark ~ .) +
+    scale_fill_brewer(palette = "RdYlBu", direction = -1) +
+    ggtitle("Area Under the PR Curves by Condition and Mark") +
+    geom_text(aes(label = round(AUC, 3), y = AUC - 0.05), position = position_dodge(0.9), vjust = 0, color = "white") +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white"))
+
+ggsave("data/figures-evaluate-consensus-counts/pr_counts/auc.pdf", au_pr, width = 24, height = 13.5, dpi = 600)

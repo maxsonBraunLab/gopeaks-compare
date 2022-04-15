@@ -2,6 +2,42 @@
 import pandas as pd
 import yaml
 
+# general parameters ------------------------------------------------------------------------------
+
+def get_groups():
+    """
+    Get {condition}_{mark} information without replicates using the samplesheet.
+    """
+    outdf = pd.DataFrame()
+    cond_mark = st[['condition', 'mark']][st.mark != "IgG"].drop_duplicates().reset_index(drop = True) # condition_mark w/out replicates
+    for method in all_methods:
+        tmpdf = cond_mark.copy()
+        tmpdf['method'] = method
+        outdf = pd.concat([outdf, tmpdf])
+    outdf = outdf.reset_index(drop = True)
+    return(outdf)
+
+def group_reps(wildcards):
+    """
+    Input: {condition}_{mark} groups
+    Output: peak files with {method}_{condition}_{replicate}_{mark}
+    """
+    samples = list( st[(st.condition == wildcards.condition) & (st.mark == wildcards.mark)]['sample'] )
+    if wildcards.method == "gopeaks":
+        return([ "data/gopeaks/{s}_peaks.bed".format(s = i) for i in samples ])
+    if wildcards.method == "macs2":
+        return([ "data/macs2/{s}_peaks.bed".format(s = i) for i in samples ])
+    if wildcards.method == "seacr-relaxed":
+        return([ "data/seacr/{s}.relaxed.bed".format(s = i) for i in samples ])
+    if wildcards.method == "seacr-stringent":
+        return([ "data/seacr/{s}.stringent.bed".format(s = i) for i in samples ])
+
+def consensus_params(wildcards):
+    if wildcards.mark == "H3K27me3":
+        return 1
+    else:
+        return 2
+
 # map samples to fastqs
 def get_samples():
     """
@@ -30,6 +66,8 @@ def get_reads():
     rlist=list(st['R1'])+list(st['R2'])
     rlist=[os.path.basename(f).split('.')[0] for f in rlist]
     return rlist
+
+# peak calling ------------------------------------------------------------------------------------
 
 def get_igg(wildcards):
     """
@@ -100,6 +138,8 @@ def seacr_norm(wildcards):
     else:
         return "norm"
 
+# gopeaks parameters ------------------------------------------------------------------------------
+
 def get_callpeaks(wildcards):
     """
     Returns the callpeaks input files
@@ -119,11 +159,66 @@ def gopeaks_igg(wildcards):
         iggbam=f'data/ban/{igg}.ban.sorted.markd.bam'
         isigg="IgG" in wildcards.sample
         if not isigg:
-            return f'-control {iggbam}'
+            return f'--control {iggbam}'
         else:
             return ""
     else:
         return ""
+
+def get_minwidth(wildcards):
+    """
+    Input: wildcard of a sample
+    Output: change minwidth for H3K27Ac in Kasumi cells
+    Note: only appropriate for this analysis
+    """
+    condition = str(wildcards.sample).split("_")[0]
+    replicate = str(wildcards.sample).split("_")[1]
+    mark = str(wildcards.sample).split("_")[2]
+    if ((condition == "Kasumi") and (mark == "H3K27Ac")):
+        return ""
+    else:
+        return ""
+
+def get_step(wildcards):
+    """
+    Return args for gopeaks for broad marks
+    """
+    if st.loc[wildcards.sample]['peak'] == "broad":
+        return "--step 5000"
+    else:
+        return ""
+
+def get_slide(wildcards):
+    """
+    Return args for gopeaks for broad marks
+    """
+    if st.loc[wildcards.sample]['peak'] == "broad":
+        return "--slide 1000"
+    else:
+        return ""
+
+def get_mdist(wildcards):
+    """
+    Return args for gopeaks for broad marks
+    """
+    if st.loc[wildcards.sample]['peak'] == "broad":
+        return "--mdist 3000"
+    else:
+        return "--mdist 1000"
+
+# evaluation parameters ---------------------------------------------------------------------------
+
+def get_standard(wildcards):
+    """
+    Input: wildcard of a sample
+    Method: use wildcard of a sample to grab standard in config.yml
+    Output: the gold standard file
+    """
+    with open("src/config.yml", "r") as fi:
+        cfg = yaml.safe_load(fi)
+    return( cfg["STANDARDS"][wildcards.sample] )
+
+# deprecated --------------------------------------------------------------------------------------
 
 def dynamic_range_input():
     """
@@ -141,56 +236,4 @@ def dynamic_range_input():
     input_bams = glob.glob("data/ban/{condition}*{mark}*.bam".format(condition = condition, mark = mark))
     for bam in input_bams:
         return(consensus_file, bam)
-
-def get_standard(wildcards):
-    """
-    Input: wildcard of a sample
-    Method: use wildcard of a sample to grab standard in config.yml
-    Output: the gold standard file
-    """
-    with open("src/config.yml", "r") as fi:
-        cfg = yaml.safe_load(fi)
-    return( cfg["STANDARDS"][wildcards.sample] )
-
-def get_minwidth(wildcards):
-    """
-    Input: wildcard of a sample
-    Output: change minwidth for H3K27Ac in Kasumi cells
-    Note: only appropriate for this analysis
-    """
-    condition = str(wildcards.sample).split("_")[0]
-    replicate = str(wildcards.sample).split("_")[1]
-    mark = str(wildcards.sample).split("_")[2]
-    if ((condition == "Kasumi") and (mark == "H3K27Ac")):
-        return ""
-    else:
-        return ""
-
-def get_groups():
-    """
-    Get {condition}_{mark} information without replicates using the samplesheet.
-    """
-    outdf = pd.DataFrame()
-    cond_mark = st[['condition', 'mark']][st.mark != "IgG"].drop_duplicates().reset_index(drop = True) # condition_mark w/out replicates
-    for method in all_methods:
-        tmpdf = cond_mark.copy()
-        tmpdf['method'] = method
-        outdf = pd.concat([outdf, tmpdf])
-    outdf = outdf.reset_index(drop = True)
-    return(outdf)
-
-def group_reps(wildcards):
-    """
-    Input: {condition}_{mark} groups
-    Output: peak files with {method}_{condition}_{replicate}_{mark}
-    """
-    samples = list( st[(st.condition == wildcards.condition) & (st.mark == wildcards.mark)]['sample'] )
-    if wildcards.method == "gopeaks":
-        return([ "data/gopeaks/{s}.bed".format(s = i) for i in samples ])
-    if wildcards.method == "macs2":
-        return([ "data/macs2/{s}_peaks.narrowPeak".format(s = i) for i in samples ])
-    if wildcards.method == "seacr-relaxed":
-        return([ "data/seacr/{s}.relaxed.bed".format(s = i) for i in samples ])
-    if wildcards.method == "seacr-stringent":
-        return([ "data/seacr/{s}.stringent.bed".format(s = i) for i in samples ])
 

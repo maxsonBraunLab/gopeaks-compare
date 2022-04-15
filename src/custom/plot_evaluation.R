@@ -128,6 +128,7 @@ if (AUC(straight_line) == 0.5) {
 # AUC for ROCs ------------------------------------------------------------------------------------
 
 # Calculate AUC for all method,condition,replicate,mark
+save.image()
 list_of_auc <- lapply(split(model_df, model_df$info), function(x) {
 
   x %>% 

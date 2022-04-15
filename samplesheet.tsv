@@ -1,4 +1,7 @@
 sample	R1	R2	mark	condition	igg	peak
+K562_1_CTCF	data/raw/K562_1_CTCF_R1.fastq.gz	data/raw/K562_1_CTCF_R2.fastq.gz	CTCF	K562	K562_1_IgG	narrow
+K562_2_CTCF	data/raw/K562_2_CTCF_R1.fastq.gz	data/raw/K562_2_CTCF_R2.fastq.gz	CTCF	K562	K562_2_IgG	narrow
+K562_3_CTCF	data/raw/K562_3_CTCF_R1.fastq.gz	data/raw/K562_3_CTCF_R2.fastq.gz	CTCF	K562	K562_1_IgG	narrow
 K562_1_H3K27Ac	data/raw/K562_1_H3K27Ac_R1.fastq.gz	data/raw/K562_1_H3K27Ac_R2.fastq.gz	H3K27Ac	K562	K562_1_IgG	narrow
 K562_1_H3K4me1	data/raw/K562_1_H3K4me1_R1.fastq.gz	data/raw/K562_1_H3K4me1_R2.fastq.gz	H3K4me1	K562	K562_1_IgG	narrow
 K562_1_H3K4me2	data/raw/K562_1_H3K4me2_R1.fastq.gz	data/raw/K562_1_H3K4me2_R2.fastq.gz	H3K4me2	K562	K562_1_IgG	narrow
@@ -8,6 +11,7 @@ K562_2_H3K27Ac	data/raw/K562_2_H3K27Ac_R1.fastq.gz	data/raw/K562_2_H3K27Ac_R2.fa
 K562_2_H3K4me1	data/raw/K562_2_H3K4me1_R1.fastq.gz	data/raw/K562_2_H3K4me1_R2.fastq.gz	H3K4me1	K562	K562_2_IgG	narrow
 K562_2_H3K4me2	data/raw/K562_2_H3K4me2_R1.fastq.gz	data/raw/K562_2_H3K4me2_R2.fastq.gz	H3K4me2	K562	K562_2_IgG	narrow
 K562_2_H3K4me3	data/raw/K562_2_H3K4me3_R1.fastq.gz	data/raw/K562_2_H3K4me3_R2.fastq.gz	H3K4me3	K562	K562_2_IgG	narrow
+K562_1_H3K27me3	data/raw/K562_1_H3K27me3_R1.fastq.gz	data/raw/K562_1_H3K27me3_R2.fastq.gz	H3K27me3	K562	K562_1_IgG	broad
 K562_2_IgG	data/raw/K562_2_IgG_R1.fastq.gz	data/raw/K562_2_IgG_R2.fastq.gz	IgG	K562	K562_2_IgG	narrow
 Kasumi_1_IgG	data/raw/Kasumi_1_IgG_R1.fastq.gz	data/raw/Kasumi_1_IgG_R2.fastq.gz	IgG	Kasumi	Kasumi_1_IgG	narrow
 Kasumi_2_H3K27Ac	data/raw/Kasumi_2_H3K27Ac_R1.fastq.gz	data/raw/Kasumi_2_H3K27Ac_R2.fastq.gz	H3K27Ac	Kasumi	Kasumi_1_IgG	narrow
@@ -21,3 +25,9 @@ Pt176_2_IgG	data/raw/Pt176_2_IgG_R1.fastq.gz	data/raw/Pt176_2_IgG_R2.fastq.gz	Ig
 Pt176_3_H3K4me1	data/raw/Pt176_3_H3K4me1_R1.fastq.gz	data/raw/Pt176_3_H3K4me1_R2.fastq.gz	H3K4me1	Pt176	Pt176_3_IgG	narrow
 Pt176_3_H3K4me3	data/raw/Pt176_3_H3K4me3_R1.fastq.gz	data/raw/Pt176_3_H3K4me3_R2.fastq.gz	H3K4me3	Pt176	Pt176_3_IgG	narrow
 Pt176_3_IgG	data/raw/Pt176_3_IgG_R1.fastq.gz	data/raw/Pt176_3_IgG_R2.fastq.gz	IgG	Pt176	Pt176_3_IgG	narrow
+H1D1_1_CTCF	data/raw/H1D1_1_CTCF_R1.fastq.gz	data/raw/H1D1_1_CTCF_R2.fastq.gz	CTCF	H1D1	H1D1_1_IgG	narrow
+H1D1_2_CTCF	data/raw/H1D1_2_CTCF_R1.fastq.gz	data/raw/H1D1_2_CTCF_R2.fastq.gz	CTCF	H1D1	H1D1_1_IgG	narrow
+H1D1_1_Sox2	data/raw/H1D1_1_Sox2_R1.fastq.gz	data/raw/H1D1_1_Sox2_R2.fastq.gz	Sox2	H1D1	H1D1_1_IgG	narrow
+H1D1_2_Sox2	data/raw/H1D1_2_Sox2_R1.fastq.gz	data/raw/H1D1_2_Sox2_R2.fastq.gz	Sox2	H1D1	H1D1_1_IgG	narrow
+H1D1_1_IgG	data/raw/H1D1_1_IgG_R1.fastq.gz	data/raw/H1D1_1_IgG_R2.fastq.gz	IgG	H1D1	H1D1_1_IgG	narrow
+H1D5_1_IgG	data/raw/H1D5_1_IgG_R1.fastq.gz	data/raw/H1D5_1_IgG_R2.fastq.gz	IgG	H1D5	H1D5_1_IgG	narrow

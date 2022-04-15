@@ -4,7 +4,6 @@ rule macs2:
 		index = "data/ban/{sample}.ban.sorted.markd.bam.bai",
 		igg = get_igg
 	output:
-		"data/macs2/{sample}_peaks.narrowPeak",
 		"data/macs2/{sample}_peaks.xls"
 	params:
 		genome_size=config["GSIZE"],
@@ -21,6 +20,15 @@ rule macs2:
 		"{params.peak} --tempdir data/macs2 > {log} 2>&1"
 # {input.igg} makes sure the corresponding IgG is made before macs2 is run.
 # Otherwise {params.igg} does not enforce making IgG.
+
+# get narrowPeak and broadPeak to common bed format
+rule fix_macs2:
+	input:
+		"data/macs2/{sample}_peaks.xls"
+	output:
+		"data/macs2/{sample}_peaks.bed"
+	shell:
+		"grep -vE '^#|^$' {input} | grep -v 'start' | cut -f1-3 > {output}"
 
 rule get_seacr:
 	output:
@@ -98,7 +106,7 @@ rule seacr_stringent:
 
 rule frip_gopeaks:
 	input:
-		"data/gopeaks/{sample}.bed",
+		"data/gopeaks/{sample}_peaks.bed",
 		"data/ban/{sample}.ban.sorted.markd.bam"
 	output:
 		"data/plotEnrichment/gopeaks_{sample}.png",
