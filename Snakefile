@@ -44,75 +44,52 @@ fastqScreenDict = {
 }
 
 all_methods = ["gopeaks", "macs2", "seacr-relaxed", "seacr-stringent"]
-all_groups = get_groups() # {method}_{condition}_{mark} no igg
+all_groups = get_groups() # df of method, cond, and mark, columns w/out igg.
 
 rule all:
     input:
-        # quality control -------------------------------------------
+        # quality control ---------------------------------------------------------------
         expand("data/fastqc/{read}.html", read=reads),
         expand("data/fastq_screen/{read}_screen.txt", read=reads),
         expand(["data/ban/{sample}.ban.sorted.markd.bam",
                 "data/tracks/{sample}.bw",
-                ], sample=samps),
-        expand(["data/preseq/lcextrap_{sample}.txt",
-        # "data/dtools/fingerprint_{sample}.tsv",
-        ], sample=samps),
-        expand("data/plotEnrichment/{method}_{sample}.{ext}",
-            method = all_methods,
-            sample = samps,
-            ext = ["png", "tsv"]),
-        # expand("data/plotEnrichment_consensus/{method}_{sample}.tsv",
-        #     method = all_methods,
-        #     sample = sample_noigg),
-        # peak calling ----------------------------------------------
+                "data/preseq/lcextrap_{sample}.txt"],
+                sample=samps),
+        # peak calling ------------------------------------------------------------------
         "src/gopeaks",
         "src/SEACR-1.3/SEACR_1.3.sh",
         "src/SEACR-1.4/SEACR_1.4.sh",
-        expand("data/gopeaks/{sample}.bed", sample = samps),
+        expand("data/gopeaks/{sample}_peaks.bed", sample = samps),
         expand("data/macs2/{sample}_peaks.xls", sample = samps),
         expand("data/seacr/{sample}.{type}.bed",
             sample = samps,
             type = ["relaxed", "stringent"]),
-        # custom analyses -------------------------------------------
+        # custom analyses ---------------------------------------------------------------
         "data/exclusive_signal",
         "data/computeMatrix",
-        # "data/plotHeatmap",
-        # "data/scaledHeatmap",
+        "data/plotHeatmap",
         "data/intervene",
-        # "data/GO",
-        # custom figures --------------------------------------------
-        # "data/figures/peak-counts", "data/figures/peak-distances", "data/figures/FRiP",
-        # "data/figures/peak_plots",
-        # "data/figures/exclusive_signal",
-        # "data/figures/GO/exclusive",
-        # model evaluation ------------------------------------------
-        # use different ranking metrics and raw counts
-        expand("data/peak_counts/{method}_{sample}.bed",
+        # "data/consensus_igg",
+        # run homer on CUT&RUN TFs
+        expand("data/zip_HOMER/{method}_{condition}_{mark}.zip",
             method = all_methods,
-            sample = sample_noigg),
-        expand("data/evaluate_models/{method}_{sample}.txt",
-            method = all_methods,
-            sample = list(config["STANDARDS"].keys()) ),
-        expand("data/evaluate_counts/{method}_{sample}.txt",
-            method = all_methods,
-            sample = list(config["STANDARDS"].keys()) ),
-        # "data/figures/roc",
-        # "data/figures/pr",
-        # "data/figures/roc_counts",
-        # "data/figures/pr_counts",
-        # consensus analyses ----------------------------------------
-        expand("data/consensus/{method}_{condition}_{mark}.bed", zip,
-            method = list(all_groups.method),
-            condition = list(all_groups.condition),
-            mark = list(all_groups.mark)),
-        expand("data/evaluate_consensus_counts/{method}_{sample}.txt",
-            method = all_methods,
-            sample = list(config["STANDARDS"].keys()) ),
+            condition = ["H1D1"],
+            mark = ["CTCF", "Sox2"]),
+        # custom figures ----------------------------------------------------------------
+        "data/figures-evaluate-consensus-counts/peak-distances",
+        "data/figures-evaluate-consensus-counts/peak-counts",
+        "data/figures-evaluate-consensus-counts/FRiP",
         "data/figures-evaluate-consensus-counts/roc_counts",
         "data/figures-evaluate-consensus-counts/pr_counts",
         "data/figures-evaluate-consensus-counts/consensus_peak_plots",
+        "data/figures-evaluate-consensus-counts/exclusive-peaks",
+        "data/figures-evaluate-consensus-counts/consensus-peak-standard-intersections.pdf",
         "data/consensus/consensus-standard-intersection/intersections-summary.txt",
-        "data/figures-evaluate-consensus-counts/consensus-peak-standard-intersections.pdf"
+        "data/figures-evaluate-consensus-counts/homer",
+        # model evaluation --------------------------------------------------------------
+        expand("data/evaluate_consensus_counts/{method}_{sample}.txt",
+            method = all_methods,
+            sample = list(config["STANDARDS"].keys()) )
 
 # fastqc for each read
 rule fastqc:
@@ -128,23 +105,6 @@ rule fastqc:
     threads: 4
     wrapper:
         "0.65.0/bio/fastqc"
-
-# detect contaminants
-# rule fastq_screen:
-#     input:
-#         "data/raw/{read}.fastq.gz"
-#     output:
-#         txt="data/fastq_screen/{read}.fastq_screen.txt",
-#         png="data/fastq_screen/{read}.fastq_screen.png"
-#     params:
-#         fastq_screen_config=fastqScreenDict,
-#         subset=100000,
-#         aligner='bowtie2'
-#     log:
-#         "data/logs/fastq_screen_{read}.log"
-#     threads: 8
-#     wrapper:
-#         "0.74.0/bio/fastq_screen"
 
 rule fastq_screen:
     input:
@@ -296,7 +256,6 @@ rule preseq_lcextrap:
     shell:
         "preseq lc_extrap -B -P -e 1000000000 -o {output} {input} > {log} 2>&1"
 
-
 rule plotFinger:
     input:
         "data/ban/{sample}.ban.sorted.markd.bam", "data/ban/{sample}.ban.sorted.markd.bam.bai"
@@ -322,14 +281,20 @@ rule gopeaks:
         index = "data/ban/{sample}.ban.sorted.markd.bam.bai",
         igg = get_igg
     output:
-        "data/gopeaks/{sample}.bed"
+        "data/gopeaks/{sample}_peaks.bed"
     params:
         igg = gopeaks_igg,
-        mindwidth = get_minwidth
+        mindwidth = get_minwidth,
+        step = get_step,
+        slide = get_slide,
+        mdist = get_mdist
     log:
         "data/logs/gopeaks_{sample}.log"
     shell:
-        "{input.gopeaks} -bam {input.sample} {params.igg} -mdist 1000 {params.mindwidth} -of {output} > {log} 2>&1"
+        "{input.gopeaks} --bam {input.sample} {params.igg} "
+        "{params.mdist} {params.mindwidth} "
+        "{params.step} {params.slide} "
+        "-o data/gopeaks/{wildcards.sample} > {log} 2>&1"
 # input.igg requires the IgG bam file, even if treatment is IgG. however, params.igg will mask input.igg if treatment is IgG.
 # so treatment file != control file for all samples.
 
@@ -338,26 +303,66 @@ rule consensus:
         group_reps
     output:
         "data/consensus/{method}_{condition}_{mark}.bed"
+    params:
+        consensus = consensus_params
     conda:
         "envs/bedtools.yml"
     shell:
         "cat {input} | sort -k1,1 -k2,2n | "
-        "bedtools merge | bedtools intersect -a - -b {input} -c | "
-        "awk -v OFS='\t' '$4 >= 2 {{print}}' | cut -f1-3 > {output} "
+        "bedtools merge | bedtools intersect -a stdin -b {input} -c | "
+        "awk -v OFS='\t' '$4 >= {params.consensus} {{print}}' | cut -f1-3 > {output} "
 
-# rule consensus:
-#     input:
-#        macs2 = expand("data/macs2/{sample}_peaks.narrowPeak", sample=sample_noigg),
-#        gopeaks = expand("data/gopeaks/{sample}.bed", sample=sample_noigg),
-#        seacr_relaxed = expand("data/seacr/{sample}.relaxed.bed", sample=sample_noigg),
-#        seacr_stringent = expand("data/seacr/{sample}.stringent.bed", sample=sample_noigg)
-#     output:
-#         directory("data/consensus"),
-#         "data/consensus/all_groups.txt"
-#     conda:
-#         "envs/bedtools.yml"
-#     shell:
-#         "bash src/custom/consensus_peaks.sh"
+rule consensus_igg:
+    input:
+        expand("data/consensus/{method}_{condition}_{mark}.bed", zip,
+            method = all_groups.method,
+            condition = all_groups.condition,
+            mark = all_groups.mark)
+    output:
+        directory("data/consensus_igg")
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bash src/custom/consensus_igg.sh"
+
+rule homer:
+    input:
+        "data/consensus/{method}_{condition}_{mark}.bed"
+    output:
+        directory("data/homer/{method}_{condition}_{mark}")
+    wildcard_constraints:
+        condition = "H1D.+"
+    params:
+        preparsed_dir = "/home/groups/MaxsonLab/indices/GRch38"
+    conda:
+        "envs/homer.yaml"
+    threads: 8
+    log:
+        "data/logs/{method}_{condition}_{mark}.log"
+    shell:
+        "findMotifsGenome.pl {input} {config[FASTA]} {output} "
+        "-size 200 -p {threads} -preparsedDir {params.preparsed_dir} > {log} 2>&1"
+
+rule zip_homer:
+    input:
+        "data/homer/{method}_{condition}_{mark}"
+    output:
+        "data/zip_HOMER/{method}_{condition}_{mark}.zip"
+    shell:
+        "zip -r {output} {input}"
+
+rule plot_homer:
+    input:
+        expand("data/zip_HOMER/{method}_{condition}_{mark}.zip",
+            method = all_methods,
+            condition = ["H1D1"],
+            mark = ["CTCF", "Sox2"])
+    output:
+        directory("data/figures-evaluate-consensus-counts/homer")
+    conda:
+        "envs/plot.yml"
+    script:
+        "src/custom/plot_homer.R"
 
 rule multiqc:
     input:
@@ -373,48 +378,12 @@ rule multiqc:
 
 # custom analyses ---------------------------------------------------------------------------------
 
-# count reads at consensus regions
-rule consensus_signal:
-    input:
-        "data/consensus"
-    output:
-        directory("data/consensus_signal")
-    conda:
-        "envs/bedtools.yml"
-    shell:
-        "bash src/custom/consensus_signal.sh"
-
-rule peak_counts:
-    input:
-        gopeaks = "data/gopeaks/{sample}.bed",
-        macs2 = "data/macs2/{sample}_peaks.narrowPeak",
-        seacr_relaxed = "data/seacr/{sample}.relaxed.bed",
-        seacr_stringent = "data/seacr/{sample}.stringent.bed",
-        bam = "data/ban/{sample}.ban.sorted.markd.bam"
-    output:
-        gopeaks = "data/peak_counts/gopeaks_{sample}.bed",
-        macs2 = "data/peak_counts/macs2_{sample}.bed",
-        seacr_relaxed = "data/peak_counts/seacr-relaxed_{sample}.bed",
-        seacr_stringent = "data/peak_counts/seacr-stringent_{sample}.bed"
-    conda:
-        "envs/bedtools.yml"
-    shell:
-        """
-        cut -f 1-3 {input.gopeaks} | bedtools intersect -C -a stdin -b {input.bam} > {output.gopeaks}
-        cut -f 1-3 {input.macs2} | bedtools intersect -C -a stdin -b {input.bam} > {output.macs2}
-        cut -f 1-3 {input.seacr_relaxed} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_relaxed}
-        cut -f 1-3 {input.seacr_stringent} | bedtools intersect -C -a stdin -b {input.bam} > {output.seacr_stringent}
-        """
-# may want to switch to counting read pairs
-
 rule peak_plot:
     input:
-        # "data/consensus_signal",
         expand("data/peak_counts/{method}_{sample}.bed",
             method = all_methods,
             sample = sample_noigg)
     output:
-        # directory("data/figures/consensus_peak_plots"),
         directory("data/figures/peak_plots")
     conda:
         "envs/plot.yml"
@@ -427,9 +396,9 @@ rule peak_characteristics:
     input:
         "data/consensus"
     output:
-        directory("data/figures/peak-distances"),
-        directory("data/figures/peak-counts"),
-        directory("data/figures/FRiP")
+        directory("data/figures-evaluate-consensus-counts/peak-distances"),
+        directory("data/figures-evaluate-consensus-counts/peak-counts"),
+        directory("data/figures-evaluate-consensus-counts/FRiP"),
     conda:
         "envs/plot.yml"
     script:
@@ -438,8 +407,7 @@ rule peak_characteristics:
 # deeptools heatmap for all samples at consensus intervals.
 rule heatmap:
     input:
-        expand("data/tracks/{sample}.bw", sample = sample_noigg),
-        "data/consensus/all_groups.txt",
+        expand("data/tracks/{sample}.bw", sample = samps)
     output:
         directory("data/computeMatrix"),
         directory("data/plotHeatmap")
@@ -448,49 +416,61 @@ rule heatmap:
     shell:
         "bash src/custom/heatmap.sh"
 
-rule scaledHeatmap:
+rule exclusive_heatmaps:
     input:
-        expand("data/tracks/{sample}.bw", sample = sample_noigg),
-        "data/consensus/all_groups.txt"
+        expand("data/tracks/{sample}.bw", sample = samps),
+        "data/intervene"
     output:
-        directory("data/scaledHeatmap")
+        directory("data/exclusive-heatmaps")
     conda:
         "envs/dtools.yml"
     shell:
-        "bash src/custom/scaledHeatmap.sh"
+        "bash src/custom/exclusive_heatmaps.sh"
 
 # venn diagram of consensus peaks
 rule intervene:
     input:
-        "data/consensus/all_groups.txt"
+        expand("data/consensus/{method}_{condition}_{mark}.bed", zip,
+            method = list(all_groups.method),
+            condition = list(all_groups.condition),
+            mark = list(all_groups.mark)),
     output:
         directory("data/intervene")
     conda:
-        "envs/dtools.yml"
+        "envs/intervene.yml"
     shell:
-        "bash src/custom/intervene.sh -i {input}"
+        "bash src/custom/intervene.sh"
 
-# count reads at the replicate level at caller-exclusive peaks.
-rule exclusive_signal:
+# count reads at caller-exclusive peaks.
+rule exclusive_counts:
     input:
         "data/intervene"
     output:
         directory("data/exclusive_signal")
     conda:
         "envs/bedtools.yml"
-    threads: 8
     shell:
         "bash src/custom/exclusive_signal.sh"
 
-rule exclusive_signal_plot:
+rule exclusive_counts_plot:
     input:
         "data/exclusive_signal"
     output:
-        directory("data/figures/exclusive_signal")
+        directory("data/figures-evaluate-consensus-counts/exclusive-counts")
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bash src/custom/exclusive_signal.sh"
+
+rule exclusive_annotation:
+    input:
+        "data/intervene"
+    output:
+        directory("data/figures-evaluate-consensus-counts/exclusive-peaks")
     conda:
         "envs/plot.yml"
     script:
-        "src/custom/exclusive_signal.R"
+        "src/custom/exclusive-peaks.R"
 
 # count consensus peak intersections with promoters by method.
 # promoter buckets usually 1kb downstream and 1-5kb upstream of a gene.

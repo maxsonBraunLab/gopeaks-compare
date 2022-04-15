@@ -1,53 +1,13 @@
 __default__:
     job-name: "{rule}"
-    mem: 8G
-    partition: "exacloud"
+    mem: 32G
+    # partition: "exacloud"
+    partition: "light"
     time: "06:00:00"
     nodes: 1
-    cpus-per-task: 4
+    cpus-per-task: 8
     output: "jobs/out/{rule}_%j.out"
     error: "jobs/error/{rule}_%j.err"
-bowtie2:
-    cpus-per-task: 8
 gopeaks:
-    mem: 28G
-evaluate_macs2:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_seacr_relaxed:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_seacr_stringent:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_gopeaks:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_gopeaks_counts:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_macs2_counts:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_seacr_relaxed_counts:
-    cpus-per-task: 8
-    mem: 8G
-evaluate_seacr_stringent_counts:
-    cpus-per-task: 8
-    mem: 8G
-gopeaks_consensus_counts:
-    mem: 16G
-macs2_consensus_counts:
-    mem: 16G
-seacr_relaxed_consensus_counts:
-    mem: 16G
-seacr_stringent_consensus_counts:
-    mem: 16G
-evaluate_consensus_counts:
-    cpus-per-task: 8
-    mem: 8G
-bedgraph:
-    mem: 24G
-peak_counts:
-    mem: 24G
+    mem: 64G
 
